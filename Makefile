@@ -18,7 +18,7 @@ export
 .PHONY: test lint fmt vet
 
 test: fmt vet docker-is-running $(GINKGO)
-	$(GINKGO) -r -v -cover .
+	$(GINKGO) -r -v -cover pkg
 
 # First run gover to merge the coverprofiles and upload to coveralls
 coverage: $(GOVERALLS) $(GOVER)
