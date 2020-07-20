@@ -1,2 +1,5 @@
 /tools/*
 !/tools/goget-wrapper
+/reports
+*.coverprofile
+
