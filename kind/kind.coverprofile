@@ -1,0 +1,19 @@
+mode: atomic
+github.com/kubism/testutil/kind/cluster.go:26.54,28.2 1 0
+github.com/kubism/testutil/kind/cluster.go:30.66,31.52 1 0
+github.com/kubism/testutil/kind/cluster.go:31.52,34.3 2 0
+github.com/kubism/testutil/kind/cluster.go:37.52,38.52 1 0
+github.com/kubism/testutil/kind/cluster.go:38.52,41.3 2 0
+github.com/kubism/testutil/kind/cluster.go:44.38,45.52 1 0
+github.com/kubism/testutil/kind/cluster.go:45.52,48.3 2 0
+github.com/kubism/testutil/kind/cluster.go:51.38,52.52 1 0
+github.com/kubism/testutil/kind/cluster.go:52.52,55.3 2 0
+github.com/kubism/testutil/kind/cluster.go:58.55,59.52 1 0
+github.com/kubism/testutil/kind/cluster.go:59.52,62.3 2 0
+github.com/kubism/testutil/kind/cluster.go:70.66,79.27 2 1
+github.com/kubism/testutil/kind/cluster.go:85.2,87.16 3 1
+github.com/kubism/testutil/kind/cluster.go:90.2,93.8 1 1
+github.com/kubism/testutil/kind/cluster.go:79.27,81.17 2 0
+github.com/kubism/testutil/kind/cluster.go:81.17,83.4 1 0
+github.com/kubism/testutil/kind/cluster.go:87.16,89.3 1 0
+github.com/kubism/testutil/kind/cluster.go:96.34,98.2 1 1
