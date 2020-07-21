@@ -5,6 +5,8 @@ import (
 
 	"github.com/kubism/testutil/pkg/fs"
 
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/log"
@@ -19,46 +21,46 @@ type options struct {
 	ClusterOpts  []cluster.CreateOption
 }
 
-type CreateOption interface {
+type Option interface {
 	apply(*options) error
 }
 
-type createOptionAdapter func(*options) error
+type optionAdapter func(*options) error
 
-func (c createOptionAdapter) apply(o *options) error {
+func (c optionAdapter) apply(o *options) error {
 	return c(o)
 }
 
-func CreateWithWaitForReady(waitTime time.Duration) CreateOption {
-	return createOptionAdapter(func(o *options) error {
+func WithWaitForReady(waitTime time.Duration) Option {
+	return optionAdapter(func(o *options) error {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithWaitForReady(waitTime))
 		return nil
 	})
 }
 
-func CreateWithConfig(config *Config) CreateOption {
-	return createOptionAdapter(func(o *options) error {
+func WithConfig(config *Config) Option {
+	return optionAdapter(func(o *options) error {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithV1Alpha4Config(config))
 		return nil
 	})
 }
 
-func CreateWithDocker() CreateOption {
-	return createOptionAdapter(func(o *options) error {
+func WithDocker() Option {
+	return optionAdapter(func(o *options) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithDocker())
 		return nil
 	})
 }
 
-func CreateWithPodman() CreateOption {
-	return createOptionAdapter(func(o *options) error {
+func WithPodman() Option {
+	return optionAdapter(func(o *options) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithPodman())
 		return nil
 	})
 }
 
-func CreateWithLogger(logger log.Logger) CreateOption {
-	return createOptionAdapter(func(o *options) error {
+func WithLogger(logger log.Logger) Option {
+	return optionAdapter(func(o *options) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(logger))
 		return nil
 	})
@@ -69,7 +71,7 @@ type Cluster struct {
 	provider *cluster.Provider
 }
 
-func Create(name string, opts ...CreateOption) (*Cluster, error) {
+func NewCluster(name string, opts ...Option) (*Cluster, error) {
 	o := options{ // default options
 		ProviderOpts: []cluster.ProviderOption{
 			cluster.ProviderWithDocker(),
@@ -107,6 +109,14 @@ func (c *Cluster) GetKubeConfigAsTempFile() (*fs.TempFile, error) {
 	return fs.NewTempFile([]byte(content))
 }
 
-func (c *Cluster) Delete() error {
+func (c *Cluster) GetRESTConfig() (*rest.Config, error) {
+	kubeConfig, err := c.GetKubeConfig()
+	if err != nil {
+		return nil, err
+	}
+	return clientcmd.RESTConfigFromKubeConfig([]byte(kubeConfig))
+}
+
+func (c *Cluster) Close() error {
 	return c.provider.Delete(c.Name, "")
 }
