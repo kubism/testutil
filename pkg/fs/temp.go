@@ -31,3 +31,21 @@ func NewTempFile(content []byte) (*TempFile, error) {
 func (f *TempFile) Close() error {
 	return os.RemoveAll(filepath.Dir(f.Path))
 }
+
+type TempDir struct {
+	Path string
+}
+
+func NewTempDir() (*TempDir, error) {
+	path, err := ioutil.TempDir("", "kubism-testutil")
+	if err != nil {
+		return nil, err
+	}
+	return &TempDir{
+		Path: path,
+	}, nil
+}
+
+func (d *TempDir) Close() error {
+	return os.RemoveAll(d.Path)
+}

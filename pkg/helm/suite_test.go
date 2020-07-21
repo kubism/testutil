@@ -25,7 +25,7 @@ func TestHelm(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	var err error
 	By("setup kind cluster")
-	cluster, err = kind.NewCluster(rand.String(8), kind.WithWaitForReady(3*time.Minute))
+	cluster, err = kind.NewCluster(rand.String(8), kind.ClusterWithWaitForReady(3*time.Minute))
 	Expect(err).To(Succeed())
 	By("setup rest client")
 	config, err = cluster.GetRESTConfig()

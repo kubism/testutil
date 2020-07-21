@@ -16,51 +16,51 @@ import (
 type Config = v1alpha4.Cluster
 type NoopLogger = log.NoopLogger
 
-type options struct {
+type clusterOptions struct {
 	ProviderOpts []cluster.ProviderOption
 	ClusterOpts  []cluster.CreateOption
 }
 
-type Option interface {
-	apply(*options) error
+type ClusterOption interface {
+	apply(*clusterOptions) error
 }
 
-type optionAdapter func(*options) error
+type clusterOptionAdapter func(*clusterOptions) error
 
-func (c optionAdapter) apply(o *options) error {
+func (c clusterOptionAdapter) apply(o *clusterOptions) error {
 	return c(o)
 }
 
-func WithWaitForReady(waitTime time.Duration) Option {
-	return optionAdapter(func(o *options) error {
+func ClusterWithWaitForReady(waitTime time.Duration) ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithWaitForReady(waitTime))
 		return nil
 	})
 }
 
-func WithConfig(config *Config) Option {
-	return optionAdapter(func(o *options) error {
+func ClusterWithConfig(config *Config) ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithV1Alpha4Config(config))
 		return nil
 	})
 }
 
-func WithDocker() Option {
-	return optionAdapter(func(o *options) error {
+func ClusterWithDocker() ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithDocker())
 		return nil
 	})
 }
 
-func WithPodman() Option {
-	return optionAdapter(func(o *options) error {
+func ClusterWithPodman() ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithPodman())
 		return nil
 	})
 }
 
-func WithLogger(logger log.Logger) Option {
-	return optionAdapter(func(o *options) error {
+func ClusterWithLogger(logger log.Logger) ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(logger))
 		return nil
 	})
@@ -71,8 +71,8 @@ type Cluster struct {
 	provider *cluster.Provider
 }
 
-func NewCluster(name string, opts ...Option) (*Cluster, error) {
-	o := options{ // default options
+func NewCluster(name string, opts ...ClusterOption) (*Cluster, error) {
+	o := clusterOptions{ // default options
 		ProviderOpts: []cluster.ProviderOption{
 			cluster.ProviderWithDocker(),
 		},

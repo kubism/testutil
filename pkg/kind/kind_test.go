@@ -14,7 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func mustNewCluster(opts ...Option) *Cluster {
+func mustNewCluster(opts ...ClusterOption) *Cluster {
 	cluster, err := NewCluster(rand.String(8), opts...)
 	Expect(err).To(Succeed())
 	return cluster
@@ -28,7 +28,7 @@ var _ = Describe("Cluster", func() {
 		})
 	})
 	It("is functional", func() {
-		cluster := mustNewCluster(WithWaitForReady(3 * time.Minute))
+		cluster := mustNewCluster(ClusterWithWaitForReady(3 * time.Minute))
 		defer cluster.Close()
 		config, err := cluster.GetRESTConfig()
 		Expect(err).NotTo(HaveOccurred())
