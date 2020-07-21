@@ -3,6 +3,8 @@ package kind
 import (
 	"time"
 
+	"github.com/kubism/testutil/pkg/fs"
+
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/log"
@@ -91,6 +93,18 @@ func Create(name string, opts ...CreateOption) (*Cluster, error) {
 		Name:     name,
 		provider: provider,
 	}, nil
+}
+
+func (c *Cluster) GetKubeConfig() (string, error) {
+	return c.provider.KubeConfig(c.Name, false)
+}
+
+func (c *Cluster) GetKubeConfigAsTempFile() (*fs.TempFile, error) {
+	content, err := c.GetKubeConfig()
+	if err != nil {
+		return nil, err
+	}
+	return fs.NewTempFile([]byte(content))
 }
 
 func (c *Cluster) Delete() error {
