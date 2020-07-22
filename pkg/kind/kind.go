@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/kubism/testutil/pkg/fs"
+	"github.com/kubism/testutil/pkg/rand"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -21,7 +22,10 @@ type NoopLogger = log.NoopLogger
 type clusterOptions struct {
 	ProviderOpts []cluster.ProviderOption
 	ClusterOpts  []cluster.CreateOption
-}
+	Name         string
+	UseExisting  bool
+	DoNotDelete  bool
+} // TODO: add options: "use existing option" and "do not delete cluster"
 
 type ClusterOption interface {
 	apply(*clusterOptions) error
@@ -31,6 +35,13 @@ type clusterOptionAdapter func(*clusterOptions) error
 
 func (c clusterOptionAdapter) apply(o *clusterOptions) error {
 	return c(o)
+}
+
+func ClusterWithName(name string) ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
+		o.Name = name
+		return nil
+	})
 }
 
 func ClusterWithWaitForReady(waitTime time.Duration) ClusterOption {
@@ -73,7 +84,7 @@ type Cluster struct {
 	provider *cluster.Provider
 }
 
-func NewCluster(name string, opts ...ClusterOption) (*Cluster, error) {
+func NewCluster(opts ...ClusterOption) (*Cluster, error) {
 	o := clusterOptions{ // default options
 		ProviderOpts: []cluster.ProviderOption{
 			cluster.ProviderWithDocker(),
@@ -81,6 +92,7 @@ func NewCluster(name string, opts ...ClusterOption) (*Cluster, error) {
 		ClusterOpts: []cluster.CreateOption{
 			cluster.CreateWithNodeImage("kindest/node:v1.16.4"),
 		},
+		Name: rand.String(10),
 	}
 	for _, opt := range opts {
 		err := opt.apply(&o)
@@ -89,12 +101,12 @@ func NewCluster(name string, opts ...ClusterOption) (*Cluster, error) {
 		}
 	}
 	provider := cluster.NewProvider(o.ProviderOpts...)
-	err := provider.Create(name, o.ClusterOpts...)
+	err := provider.Create(o.Name, o.ClusterOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return &Cluster{
-		Name:     name,
+		Name:     o.Name,
 		provider: provider,
 	}, nil
 }

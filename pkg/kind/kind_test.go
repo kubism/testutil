@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/kubism/testutil/pkg/rand"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,7 +13,7 @@ import (
 )
 
 func mustNewCluster(opts ...ClusterOption) *Cluster {
-	cluster, err := NewCluster(rand.String(8), opts...)
+	cluster, err := NewCluster(opts...)
 	Expect(err).To(Succeed())
 	return cluster
 }
