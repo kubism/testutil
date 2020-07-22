@@ -238,7 +238,7 @@ func (c installOptionAdapter) apply(o *installOptions) error {
 
 // TODO: proper options, e.g. InstallWithReleaseName, ...
 
-func (c *Client) Install(name, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*release.Release, error) {
+func (c *Client) Install(chartName, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*release.Release, error) {
 	options := installOptions{action.NewInstall(c.actionConfig)}
 	options.ReleaseName = rand.String(5)
 	options.Namespace = "default"
@@ -250,7 +250,7 @@ func (c *Client) Install(name, version string, valuesOptions ValuesOptions, opts
 		}
 	}
 	settings := c.createEnvSettings(options.Namespace)
-	fname, err := options.LocateChart(name, settings)
+	fname, err := options.LocateChart(chartName, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +269,12 @@ func (c *Client) Install(name, version string, valuesOptions ValuesOptions, opts
 		return nil, err
 	}
 	return options.Run(chart, values)
+}
+
+func (c *Client) Uninstall(releaseName string) error {
+	uninstall := action.NewUninstall(c.actionConfig)
+	_, err := uninstall.Run(releaseName)
+	return err
 }
 
 func (c *Client) Close() error {

@@ -25,5 +25,7 @@ var _ = Describe("PortForward", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rls).ToNot(BeNil())
+		// defer helmClient.Uninstall(rls.Name)
+		// k8sClient.List()
 	})
 })

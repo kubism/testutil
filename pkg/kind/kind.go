@@ -44,6 +44,20 @@ func ClusterWithName(name string) ClusterOption {
 	})
 }
 
+func ClusterUseExisting() ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
+		o.UseExisting = true
+		return nil
+	})
+}
+
+func ClusterDoNotDelete() ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
+		o.DoNotDelete = true
+		return nil
+	})
+}
+
 func ClusterWithWaitForReady(waitTime time.Duration) ClusterOption {
 	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithWaitForReady(waitTime))
@@ -72,7 +86,7 @@ func ClusterWithPodman() ClusterOption {
 	})
 }
 
-func ClusterWithLogger(logger log.Logger) ClusterOption {
+func ClusterWithLogger(logger log.Logger) ClusterOption { // TODO: use debug log method same as helm?
 	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(logger))
 		return nil
@@ -80,8 +94,9 @@ func ClusterWithLogger(logger log.Logger) ClusterOption {
 }
 
 type Cluster struct {
-	Name     string
-	provider *cluster.Provider
+	Name        string
+	provider    *cluster.Provider
+	doNotDelete bool
 }
 
 func NewCluster(opts ...ClusterOption) (*Cluster, error) {
@@ -101,13 +116,29 @@ func NewCluster(opts ...ClusterOption) (*Cluster, error) {
 		}
 	}
 	provider := cluster.NewProvider(o.ProviderOpts...)
-	err := provider.Create(o.Name, o.ClusterOpts...)
-	if err != nil {
-		return nil, err
+	exists := false
+	if o.UseExisting {
+		names, err := provider.List()
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range names {
+			if name == o.Name {
+				exists = true
+				break
+			}
+		}
+	}
+	if !exists {
+		err := provider.Create(o.Name, o.ClusterOpts...)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Cluster{
-		Name:     o.Name,
-		provider: provider,
+		Name:        o.Name,
+		provider:    provider,
+		doNotDelete: o.DoNotDelete,
 	}, nil
 }
 
@@ -140,5 +171,9 @@ func (c *Cluster) GetClient() (client.Client, error) {
 }
 
 func (c *Cluster) Close() error {
-	return c.provider.Delete(c.Name, "")
+	if !c.doNotDelete {
+		return c.provider.Delete(c.Name, "")
+	} else {
+		return nil
+	}
 }

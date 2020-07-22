@@ -29,7 +29,12 @@ func TestHelm(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	var err error
 	By("setup kind cluster")
-	cluster, err = kind.NewCluster(kind.ClusterWithWaitForReady(3 * time.Minute))
+	cluster, err = kind.NewCluster(
+		kind.ClusterWithName("testutil"),
+		kind.ClusterUseExisting(), // TODO: make optional via env variable
+		kind.ClusterDoNotDelete(),
+		kind.ClusterWithWaitForReady(3*time.Minute),
+	)
 	Expect(err).To(Succeed())
 	By("setup helm client")
 	kubeConfig, err := cluster.GetKubeConfig()
