@@ -2,16 +2,20 @@ package kube
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PortForward struct {
@@ -61,5 +65,37 @@ func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort
 
 func (pf *PortForward) Close() error {
 	close(pf.stopCh)
+	return nil
+}
+
+func IsReady(pod *corev1.Pod) bool {
+	if pod.Status.ContainerStatuses == nil {
+		return false
+	}
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if !containerStatus.Ready {
+			return false
+		}
+	}
+	return true
+}
+
+func WaitUntilReady(restConfig *rest.Config, pod *corev1.Pod, timeout time.Duration) error {
+	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme.Scheme})
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err != nil {
+		return err
+	}
+	objectKey, err := client.ObjectKeyFromObject(pod)
+	if err != nil {
+		return err
+	}
+	for !IsReady(pod) {
+		err := k8sClient.Get(ctx, objectKey, pod)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
