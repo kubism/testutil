@@ -111,17 +111,19 @@ func ClientWithDebugLog(debugLog DebugLog) ClientOption {
 }
 
 type Client struct {
-	kubeConfig string
-	options    clientOptions
-	tempDir    *fs.TempDir
-	repoFile   *repo.File
-	indexFiles map[string]*repo.IndexFile
+	kubeConfig   string
+	options      clientOptions
+	actionConfig *action.Configuration
+	tempDir      *fs.TempDir
+	repoFile     *repo.File
+	indexFiles   map[string]*repo.IndexFile
 }
 
 func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 	options := clientOptions{
 		Namespace: "default",
 		Driver:    "secrets",
+		DebugLog:  func(format string, v ...interface{}) {},
 	}
 	for _, opt := range opts {
 		err := opt.apply(&options)
@@ -133,12 +135,21 @@ func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	actionConfig := new(action.Configuration)
+	clientGetter := &restClientGetter{
+		Namespace:  options.Namespace,
+		KubeConfig: kubeConfig,
+	}
+	if err := actionConfig.Init(clientGetter, options.Namespace, options.Driver, options.DebugLog); err != nil {
+		return nil, err
+	}
 	c := &Client{
-		kubeConfig: kubeConfig,
-		options:    options,
-		tempDir:    tempDir,
-		repoFile:   repo.NewFile(),
-		indexFiles: map[string]*repo.IndexFile{},
+		kubeConfig:   kubeConfig,
+		options:      options,
+		actionConfig: actionConfig,
+		tempDir:      tempDir,
+		repoFile:     repo.NewFile(),
+		indexFiles:   map[string]*repo.IndexFile{},
 	}
 	if err := os.Mkdir(c.getCacheDir(), 0755); err != nil {
 		c.Close()
@@ -149,18 +160,6 @@ func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 		return nil, err
 	}
 	return c, nil
-}
-
-func (c *Client) getActionConfig() (*action.Configuration, error) {
-	ac := new(action.Configuration)
-	cg := &restClientGetter{
-		Namespace:  c.options.Namespace,
-		KubeConfig: c.kubeConfig,
-	}
-	if err := ac.Init(cg, c.options.Namespace, c.options.Driver, c.options.DebugLog); err != nil {
-		return nil, err
-	}
-	return ac, nil
 }
 
 func (c *Client) getCacheDir() string {
@@ -176,11 +175,7 @@ func (c *Client) writeRepoFile() error {
 }
 
 func (c *Client) List() ([]*release.Release, error) {
-	ac, err := c.getActionConfig()
-	if err != nil {
-		return nil, err
-	}
-	list := action.NewList(ac)
+	list := action.NewList(c.actionConfig)
 	return list.Run()
 }
 
@@ -242,13 +237,9 @@ func (c installOptionAdapter) apply(o *installOptions) error {
 }
 
 func (c *Client) Install(name, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*release.Release, error) {
-	ac, err := c.getActionConfig()
-	if err != nil {
-		return nil, err
-	}
-	options := installOptions{action.NewInstall(ac)}
+	options := installOptions{action.NewInstall(c.actionConfig)}
 	options.ReleaseName = rand.String(5)
-	options.Namespace = "test"
+	options.Namespace = "default"
 	options.Version = version
 	for _, opt := range opts {
 		err := opt.apply(&options)
