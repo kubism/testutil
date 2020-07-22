@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -23,7 +24,17 @@ func TestHelm(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	var err error
 	By("setup kind cluster")
-	cluster, err = kind.NewCluster(kind.ClusterWithWaitForReady(3 * time.Minute))
+	clusterOptions := []kind.ClusterOption{
+		kind.ClusterWithWaitForReady(3 * time.Minute),
+	}
+	if os.Getenv("TEST_USE_EXISTING") != "" {
+		clusterOptions = append(clusterOptions,
+			kind.ClusterWithName("testutil"),
+			kind.ClusterUseExisting(),
+			kind.ClusterDoNotDelete(),
+		)
+	}
+	cluster, err = kind.NewCluster(clusterOptions...)
 	Expect(err).To(Succeed())
 	By("setup kubeconfig")
 	kubeConfig, err = cluster.GetKubeConfig()

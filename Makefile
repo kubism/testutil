@@ -13,8 +13,7 @@ LINTER ?= $(TOOLS_DIR)/golangci-lint
 GOVERALLS ?= $(TOOLS_DIR)/goveralls
 GOVER ?= $(TOOLS_DIR)/gover
 
-export
-
+.EXPORT_ALL_VARIABLES:
 .PHONY: test lint fmt vet
 
 test: fmt vet docker-is-running $(GINKGO)
