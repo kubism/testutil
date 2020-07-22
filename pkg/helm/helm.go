@@ -236,6 +236,8 @@ func (c installOptionAdapter) apply(o *installOptions) error {
 	return c(o)
 }
 
+// TODO: proper options, e.g. InstallWithReleaseName, ...
+
 func (c *Client) Install(name, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*release.Release, error) {
 	options := installOptions{action.NewInstall(c.actionConfig)}
 	options.ReleaseName = rand.String(5)

@@ -27,9 +27,10 @@ var _ = Describe("Client", func() {
 	})
 	It("can add repository and install chart", func() {
 		client := mustNewClient()
-		// defer client.Close()
+		defer client.Close()
 		Expect(client.AddRepository(stableRepository)).To(Succeed())
-		_, err := client.Install("stable/minio", "", ValuesOptions{})
+		rls, err := client.Install("stable/minio", "", ValuesOptions{})
 		Expect(err).ToNot(HaveOccurred())
+		Expect(rls).ToNot(BeNil())
 	})
 })
