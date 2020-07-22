@@ -1,10 +1,10 @@
 package helm
 
 import (
-	"os"
 	"testing"
 	"time"
 
+	"github.com/kubism/testutil/internal/flags"
 	"github.com/kubism/testutil/pkg/kind"
 
 	. "github.com/onsi/ginkgo"
@@ -27,9 +27,9 @@ var _ = BeforeSuite(func(done Done) {
 	clusterOptions := []kind.ClusterOption{
 		kind.ClusterWithWaitForReady(3 * time.Minute),
 	}
-	if os.Getenv("TEST_USE_EXISTING") != "" {
+	if flags.KindCluster != "" {
 		clusterOptions = append(clusterOptions,
-			kind.ClusterWithName("testutil"),
+			kind.ClusterWithName(flags.KindCluster),
 			kind.ClusterUseExisting(),
 			kind.ClusterDoNotDelete(),
 		)

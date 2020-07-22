@@ -17,11 +17,11 @@ GOVER ?= $(TOOLS_DIR)/gover
 .PHONY: test lint fmt vet
 
 test: fmt vet docker-is-running $(GINKGO)
-	$(GINKGO) -r -v -cover pkg
+	$(GINKGO) -r -v -cover pkg -- $(TEST_FLAGS)
 
 
 test-%: fmt vet docker-is-running $(GINKGO)
-	$(GINKGO) -r -v -cover pkg/$*
+	$(GINKGO) -r -v -cover pkg/$* -- $(TEST_FLAGS)
 
 # First run gover to merge the coverprofiles and upload to coveralls
 coverage: $(GOVERALLS) $(GOVER)
