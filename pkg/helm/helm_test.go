@@ -32,5 +32,6 @@ var _ = Describe("Client", func() {
 		rls, err := client.Install("stable/minio", "", ValuesOptions{})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rls).ToNot(BeNil())
+		defer client.Uninstall(rls.Name)
 	})
 })
