@@ -13,7 +13,7 @@ var (
 )
 
 func mustNewClient(opts ...ClientOption) *Client {
-	client, err := NewClient(config, opts...)
+	client, err := NewClient(kubeConfig, opts...)
 	Expect(err).To(Succeed())
 	return client
 }
@@ -25,9 +25,11 @@ var _ = Describe("Client", func() {
 		_, err := client.List()
 		Expect(err).ToNot(HaveOccurred())
 	})
-	It("can add repository", func() {
+	It("can add repository and install chart", func() {
 		client := mustNewClient()
 		// defer client.Close()
 		Expect(client.AddRepository(stableRepository)).To(Succeed())
+		_, err := client.Install("stable/minio", "", ValuesOptions{})
+		Expect(err).ToNot(HaveOccurred())
 	})
 })

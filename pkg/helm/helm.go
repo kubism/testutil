@@ -6,10 +6,14 @@ import (
 	"path/filepath"
 
 	"github.com/kubism/testutil/pkg/fs"
+	"github.com/kubism/testutil/pkg/rand"
 
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/repo"
@@ -31,15 +35,15 @@ type RepositoryEntry = repo.Entry
 
 type Chart = chart.Chart
 
-// restClientGetter based on: https://github.com/helm/helm/issues/6910#issuecomment-601277026
+type ValuesOptions = values.Options
 
 type restClientGetter struct {
 	Namespace  string
-	RESTConfig *rest.Config
+	KubeConfig string
 }
 
 func (c *restClientGetter) ToRESTConfig() (*rest.Config, error) {
-	return c.RESTConfig, nil
+	return clientcmd.RESTConfigFromKubeConfig([]byte(c.KubeConfig))
 }
 
 func (c *restClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
@@ -62,13 +66,11 @@ func (c *restClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
 }
 
 func (c *restClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	// use the standard defaults for this client command
-	// DEPRECATED: remove and replace with something more accurate
-	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
-	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
-	overrides.Context.Namespace = c.Namespace
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+	clientConfig, err := clientcmd.NewClientConfigFromBytes([]byte(c.KubeConfig))
+	if err != nil {
+		panic(err) // TODO: is there a way to avoid this panic?
+	}
+	return clientConfig
 }
 
 type clientOptions struct {
@@ -109,16 +111,16 @@ func ClientWithDebugLog(debugLog DebugLog) ClientOption {
 }
 
 type Client struct {
-	restConfig *rest.Config
+	kubeConfig string
 	options    clientOptions
 	tempDir    *fs.TempDir
 	repoFile   *repo.File
 	indexFiles map[string]*repo.IndexFile
 }
 
-func NewClient(restConfig *rest.Config, opts ...ClientOption) (*Client, error) {
+func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 	options := clientOptions{
-		Namespace: "",
+		Namespace: "default",
 		Driver:    "secrets",
 	}
 	for _, opt := range opts {
@@ -132,7 +134,7 @@ func NewClient(restConfig *rest.Config, opts ...ClientOption) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{
-		restConfig: restConfig,
+		kubeConfig: kubeConfig,
 		options:    options,
 		tempDir:    tempDir,
 		repoFile:   repo.NewFile(),
@@ -153,7 +155,7 @@ func (c *Client) getActionConfig() (*action.Configuration, error) {
 	ac := new(action.Configuration)
 	cg := &restClientGetter{
 		Namespace:  c.options.Namespace,
-		RESTConfig: c.restConfig,
+		KubeConfig: c.kubeConfig,
 	}
 	if err := ac.Init(cg, c.options.Namespace, c.options.Driver, c.options.DebugLog); err != nil {
 		return nil, err
@@ -165,8 +167,12 @@ func (c *Client) getCacheDir() string {
 	return filepath.Join(c.tempDir.Path, "cache")
 }
 
+func (c *Client) getRepoFilePath() string {
+	return filepath.Join(c.tempDir.Path, "repositories.yaml")
+}
+
 func (c *Client) writeRepoFile() error {
-	return c.repoFile.WriteFile(filepath.Join(c.tempDir.Path, "repositories.yaml"), 0755)
+	return c.repoFile.WriteFile(c.getRepoFilePath(), 0755)
 }
 
 func (c *Client) List() ([]*release.Release, error) {
@@ -212,6 +218,15 @@ func (c *Client) AddRepository(cfg *RepositoryEntry) error {
 	return c.writeRepoFile()
 }
 
+func (c *Client) createEnvSettings(namespace string) *cli.EnvSettings {
+	os.Setenv("HELM_NAMESPACE", namespace)
+	os.Setenv("HELM_PLUGINS", filepath.Join(c.tempDir.Path, "plugins"))
+	os.Setenv("HELM_REGISTRY_CONFIG", filepath.Join(c.tempDir.Path, "registry.json"))
+	os.Setenv("HELM_REPOSITORY_CONFIG", c.getRepoFilePath())
+	os.Setenv("HELM_REPOSITORY_CACHE", c.getCacheDir())
+	return cli.New()
+}
+
 type installOptions struct {
 	*action.Install
 }
@@ -226,8 +241,41 @@ func (c installOptionAdapter) apply(o *installOptions) error {
 	return c(o)
 }
 
-func (c *Client) Install(chart, version string, values map[string]interface{}, opts ...InstallOption) (*release.Release, error) {
-	return nil, nil
+func (c *Client) Install(name, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*release.Release, error) {
+	ac, err := c.getActionConfig()
+	if err != nil {
+		return nil, err
+	}
+	options := installOptions{action.NewInstall(ac)}
+	options.ReleaseName = rand.String(5)
+	options.Namespace = "test"
+	options.Version = version
+	for _, opt := range opts {
+		err := opt.apply(&options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	settings := c.createEnvSettings(options.Namespace)
+	fname, err := options.LocateChart(name, settings)
+	if err != nil {
+		return nil, err
+	}
+	chart, err := loader.Load(fname)
+	if err != nil {
+		return nil, err
+	}
+	getters := getter.Providers{
+		getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		},
+	}
+	values, err := valuesOptions.MergeValues(getters)
+	if err != nil {
+		return nil, err
+	}
+	return options.Run(chart, values)
 }
 
 func (c *Client) Close() error {

@@ -6,15 +6,14 @@ import (
 
 	"github.com/kubism/testutil/pkg/kind"
 	"github.com/kubism/testutil/pkg/rand"
-	"k8s.io/client-go/rest"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var (
-	config  *rest.Config
-	cluster *kind.Cluster
+	kubeConfig string
+	cluster    *kind.Cluster
 )
 
 func TestHelm(t *testing.T) {
@@ -28,7 +27,7 @@ var _ = BeforeSuite(func(done Done) {
 	cluster, err = kind.NewCluster(rand.String(8), kind.ClusterWithWaitForReady(3*time.Minute))
 	Expect(err).To(Succeed())
 	By("setup rest client")
-	config, err = cluster.GetRESTConfig()
+	kubeConfig, err = cluster.GetKubeConfig()
 	Expect(err).To(Succeed())
 	close(done)
 }, 120)
