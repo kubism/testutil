@@ -50,4 +50,19 @@ var _ = Describe("Client", func() {
 		Expect(rls).ToNot(BeNil())
 		defer client.Uninstall(rls.Name) // nolint:errcheck
 	})
+	It("can be used with options", func() {
+		client := mustNewClient(
+			ClientWithDebugLog(func(format string, v ...interface{}) {}),
+			ClientWithDriver("secret"),
+			ClientWithNamespace("default"),
+		)
+		Expect(client.AddRepository(stableRepository)).To(Succeed())
+		name := "predefined"
+		rls, err := client.Install("stable/minio", "", ValuesOptions{},
+			InstallWithReleaseName(name),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rls).ToNot(BeNil())
+		Expect(client.Uninstall(name)).To(Succeed())
+	})
 })
