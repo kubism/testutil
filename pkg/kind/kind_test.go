@@ -73,3 +73,23 @@ var _ = Describe("Cluster", func() {
 	// 	Expect(cluster.Close()).To(Succeed())
 	// })
 })
+
+var _ = Describe("debugLogger", func() {
+	It("logs everything", func() {
+		count := 0
+		d := debugLogger{
+			Log: func(format string, args ...interface{}) {
+				count += 1
+			},
+		}
+		d.Error("1")
+		d.Errorf("2")
+		d.Warn("3")
+		d.Warnf("4")
+		i := d.V(1)
+		Expect(i.Enabled()).To(Equal(true))
+		i.Info("5")
+		i.Infof("6")
+		Expect(count).To(BeNumerically("==", 6))
+	})
+})
