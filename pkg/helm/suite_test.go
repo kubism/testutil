@@ -56,7 +56,7 @@ var _ = BeforeSuite(func(done Done) {
 	kubeConfig, err = cluster.GetKubeConfig()
 	Expect(err).To(Succeed())
 	close(done)
-}, 120)
+}, 240)
 
 var _ = AfterSuite(func() {
 	By("tearing down kind cluster")
