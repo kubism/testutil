@@ -40,6 +40,7 @@ var _ = Describe("Cluster", func() {
 			ClusterWithWaitForReady(3*time.Minute),
 			ClusterWithName("testutilkindcreate"),
 			ClusterWithDocker(),
+			ClusterWithDebugLog(func(string, ...interface{}) {}),
 		)
 		existingCluster := mustNewCluster(
 			ClusterWithName("testutilkindcreate"),

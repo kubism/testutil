@@ -34,6 +34,43 @@ import (
 // Re-export cluster configuration for easier use
 type Config = v1alpha4.Cluster
 type NoopLogger = log.NoopLogger
+type DebugLog = func(string, ...interface{})
+
+// Helper to provide a simplified interface. Use just needs to pass in a printf
+// function.
+type debugLogger struct {
+	Log DebugLog
+}
+
+func (d debugLogger) Warn(message string) {
+	d.Log("WARN: %s", message)
+}
+
+func (d debugLogger) Warnf(format string, args ...interface{}) {
+	d.Log("WARN: "+format, args...)
+}
+
+func (d debugLogger) Error(message string) {
+	d.Log("ERROR: %s", message)
+}
+
+func (d debugLogger) Errorf(format string, args ...interface{}) {
+	d.Log("ERROR: "+format, args...)
+}
+
+func (d debugLogger) Enabled() bool { return true }
+
+func (d debugLogger) Info(message string) {
+	d.Log("INFO: %s", message)
+}
+
+func (d debugLogger) Infof(format string, args ...interface{}) {
+	d.Log("INFO: "+format, args...)
+}
+
+func (d debugLogger) V(level log.Level) log.InfoLogger {
+	return d
+}
 
 type clusterOptions struct {
 	ProviderOpts []cluster.ProviderOption
@@ -102,9 +139,9 @@ func ClusterWithPodman() ClusterOption {
 	})
 }
 
-func ClusterWithLogger(logger log.Logger) ClusterOption { // TODO: use debug log method same as helm?
+func ClusterWithDebugLog(debugLog DebugLog) ClusterOption { // TODO: use debug log method same as helm?
 	return clusterOptionAdapter(func(o *clusterOptions) error {
-		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(logger))
+		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(debugLogger{debugLog}))
 		return nil
 	})
 }
