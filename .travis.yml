@@ -17,8 +17,8 @@ jobs:
   include:
   - stage: lint and test
     name: run tests
-    script:
-    - make test
+    script: # explicitly share a cluster across tests to speed up testing
+    - make TEST_FLAGS="-kind-cluster=testutil" test
     after_success:
     - make coverage
 
