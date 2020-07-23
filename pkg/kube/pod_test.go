@@ -53,6 +53,8 @@ func mustInstallMinio() *helm.Release {
 func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
 	ctx := context.Background()
 	pods := &corev1.PodList{}
+	// TODO: The following is actually introducing a race condition!
+	//       We should wait until all pods of deployment are schedule.
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
 		client.MatchingLabels{"release": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
@@ -100,14 +102,28 @@ var _ = Describe("PortForward", func() {
 		Expect(pf).To(BeNil())
 	})
 	It("fails with invalid REST config", func() {
-		rls := mustInstallMinio()
-		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		pod := mustGetReadyMinioPod(rls)
-		brokenRESTConfig, err := cluster.GetRESTConfig()
-		Expect(err).ToNot(HaveOccurred())
-		brokenRESTConfig.Host = ""
-		pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 9000)
-		Expect(err).To(HaveOccurred())
-		Expect(pf).To(BeNil())
+		Context("empty host", func() {
+			rls := mustInstallMinio()
+			defer helmClient.Uninstall(rls.Name) // nolint:errcheck
+			pod := mustGetReadyMinioPod(rls)
+			brokenRESTConfig, err := cluster.GetRESTConfig()
+			Expect(err).ToNot(HaveOccurred())
+			brokenRESTConfig.Host = ""
+			pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 9000)
+			Expect(err).To(HaveOccurred())
+			Expect(pf).To(BeNil())
+		})
+		Context("missing CA", func() {
+			rls := mustInstallMinio()
+			defer helmClient.Uninstall(rls.Name) // nolint:errcheck
+			pod := mustGetReadyMinioPod(rls)
+			brokenRESTConfig, err := cluster.GetRESTConfig()
+			Expect(err).ToNot(HaveOccurred())
+			brokenRESTConfig.CAFile = ""
+			brokenRESTConfig.CAData = []byte{}
+			pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 9000)
+			Expect(err).To(HaveOccurred())
+			Expect(pf).To(BeNil())
+		})
 	})
 })
