@@ -48,7 +48,7 @@ func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort
 	errorCh := make(chan error, 1)
 	pf.streams, pf.in, pf.out, pf.errout = genericclioptions.NewTestIOStreams()
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", pod.Namespace, pod.Name)
-	hostIP := strings.TrimLeft(pf.restConfig.Host, "https://")
+	hostIP := strings.TrimLeft(pf.restConfig.Host, "htps:/")
 
 	transport, upgrader, err := spdy.RoundTripperFor(pf.restConfig)
 	if err != nil {

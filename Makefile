@@ -28,7 +28,7 @@ coverage: $(GOVERALLS) $(GOVER)
 	$(GOVER)
 	$(GOVERALLS) -coverprofile=gover.coverprofile -service=travis-ci -repotoken $(COVERALLS_TOKEN)
 
-lint: $(LINTER) helm-lint
+lint: $(LINTER)
 	$(GO) mod verify
 	$(LINTER) run -v --no-config --deadline=5m
 

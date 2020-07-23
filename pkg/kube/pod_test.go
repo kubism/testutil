@@ -32,7 +32,7 @@ var _ = Describe("PortForward", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rls).ToNot(BeNil())
-		defer helmClient.Uninstall(rls.Name)
+		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx := context.Background()
 		pods := &corev1.PodList{}
 		Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),

@@ -25,10 +25,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const (
-	repoFileName = "repositories.yaml"
-)
-
 type DebugLog = action.DebugLog
 
 type RepositoryEntry = repo.Entry
@@ -227,6 +223,13 @@ type installOptionAdapter func(*installOptions) error
 
 func (c installOptionAdapter) apply(o *installOptions) error {
 	return c(o)
+}
+
+func InstallWithReleaseName(name string) InstallOption {
+	return installOptionAdapter(func(o *installOptions) error {
+		o.ReleaseName = name
+		return nil
+	})
 }
 
 // TODO: proper options, e.g. InstallWithReleaseName, ...
