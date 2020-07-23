@@ -78,7 +78,7 @@ type clusterOptions struct {
 	Name         string
 	UseExisting  bool
 	DoNotDelete  bool
-} // TODO: add options: "use existing option" and "do not delete cluster"
+}
 
 type ClusterOption interface {
 	apply(*clusterOptions) error
@@ -139,7 +139,7 @@ func ClusterWithPodman() ClusterOption {
 	})
 }
 
-func ClusterWithDebugLog(debugLog DebugLog) ClusterOption { // TODO: use debug log method same as helm?
+func ClusterWithDebugLog(debugLog DebugLog) ClusterOption {
 	return clusterOptionAdapter(func(o *clusterOptions) error {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(debugLogger{debugLog}))
 		return nil
