@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,7 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const PortAny = 0
+
 type PortForward struct {
+	LocalPort  int
 	restConfig *rest.Config
 	streams    genericclioptions.IOStreams
 	stopCh     chan struct{}
@@ -28,7 +32,15 @@ type PortForward struct {
 }
 
 func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort int) (*PortForward, error) {
+	var err error
+	if localPort == PortAny {
+		localPort, err = getPort()
+		if err != nil {
+			return nil, err
+		}
+	}
 	pf := &PortForward{
+		LocalPort:  localPort,
 		restConfig: restConfig,
 		stopCh:     make(chan struct{}, 1),
 	}
@@ -37,7 +49,6 @@ func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort
 	pf.streams, pf.in, pf.out, pf.errout = genericclioptions.NewTestIOStreams()
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", pod.Namespace, pod.Name)
 	hostIP := strings.TrimLeft(pf.restConfig.Host, "https://")
-	hostIP = strings.TrimLeft(hostIP, "http://")
 
 	transport, upgrader, err := spdy.RoundTripperFor(pf.restConfig)
 	if err != nil {
@@ -60,12 +71,27 @@ func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort
 		return pf, nil
 	case err := <-errorCh:
 		return nil, err
+	case <-time.After(30 * time.Second):
+		return nil, fmt.Errorf("port-forward did not become ready in time")
 	}
 }
 
 func (pf *PortForward) Close() error {
 	close(pf.stopCh)
 	return nil
+}
+
+func getPort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
+	}
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 func IsReady(pod *corev1.Pod) bool {

@@ -7,6 +7,8 @@ import (
 
 	"github.com/kubism/testutil/pkg/helm"
 
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -30,7 +32,7 @@ var _ = Describe("PortForward", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rls).ToNot(BeNil())
-		// defer helmClient.Uninstall(rls.Name)
+		defer helmClient.Uninstall(rls.Name)
 		ctx := context.Background()
 		pods := &corev1.PodList{}
 		Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
@@ -38,5 +40,15 @@ var _ = Describe("PortForward", func() {
 		Expect(len(pods.Items)).To(BeNumerically(">", 0))
 		pod := pods.Items[0]
 		Expect(WaitUntilReady(restConfig, &pod, 60*time.Second)).To(Succeed())
+		pf, err := NewPortForward(restConfig, &pod, PortAny, 9000)
+		Expect(err).ToNot(HaveOccurred())
+		minioClient, err := minio.New(fmt.Sprintf("localhost:%d", pf.LocalPort), &minio.Options{
+			Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+			Secure: false,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		_, err = minioClient.ListBuckets(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		defer pf.Close()
 	})
 })
