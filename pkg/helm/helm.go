@@ -49,6 +49,8 @@ type Chart = chart.Chart
 
 type ValuesOptions = values.Options
 
+type Release = release.Release
+
 type restClientGetter struct {
 	Namespace  string
 	KubeConfig string
@@ -250,7 +252,7 @@ func InstallWithReleaseName(name string) InstallOption {
 
 // TODO: proper options, e.g. InstallWithReleaseName, ...
 
-func (c *Client) Install(chartName, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*release.Release, error) {
+func (c *Client) Install(chartName, version string, valuesOptions ValuesOptions, opts ...InstallOption) (*Release, error) {
 	options := installOptions{action.NewInstall(c.actionConfig)}
 	options.ReleaseName = rand.String(5)
 	options.Namespace = "default"

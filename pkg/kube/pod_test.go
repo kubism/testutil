@@ -37,34 +37,77 @@ const (
 	secretAccessKey = "TESTSECRETKEY"
 )
 
+func mustInstallMinio() *helm.Release {
+	rls, err := helmClient.Install("stable/minio", "", helm.ValuesOptions{
+		StringValues: []string{
+			fmt.Sprintf("accessKey=%s", accessKeyID),
+			fmt.Sprintf("secretKey=%s", secretAccessKey),
+			"readinessProbe.initialDelaySeconds=10",
+		},
+	})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(rls).ToNot(BeNil())
+	return rls
+}
+
+func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
+	ctx := context.Background()
+	pods := &corev1.PodList{}
+	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
+		client.MatchingLabels{"release": rls.Name})).To(Succeed())
+	Expect(len(pods.Items)).To(BeNumerically(">", 0))
+	pod := pods.Items[0]
+	Expect(WaitUntilReady(restConfig, &pod, 60*time.Second)).To(Succeed())
+	return &pod
+}
+
+func checkMinioServer(addr string) error {
+	minioClient, err := minio.New(addr, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: false,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = minioClient.ListBuckets(context.Background())
+	return err
+}
+
 var _ = Describe("PortForward", func() {
-	It("can portforward pod", func() {
-		rls, err := helmClient.Install("stable/minio", "", helm.ValuesOptions{
-			StringValues: []string{
-				fmt.Sprintf("accessKey=%s", accessKeyID),
-				fmt.Sprintf("secretKey=%s", secretAccessKey),
-				"readinessProbe.initialDelaySeconds=10",
-			},
-		})
-		Expect(err).ToNot(HaveOccurred())
-		Expect(rls).ToNot(BeNil())
+	It("can portforward existing pod", func() {
+		rls := mustInstallMinio()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		ctx := context.Background()
-		pods := &corev1.PodList{}
-		Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
-			client.MatchingLabels{"release": rls.Name})).To(Succeed())
-		Expect(len(pods.Items)).To(BeNumerically(">", 0))
-		pod := pods.Items[0]
-		Expect(WaitUntilReady(restConfig, &pod, 60*time.Second)).To(Succeed())
-		pf, err := NewPortForward(restConfig, &pod, PortAny, 9000)
-		Expect(err).ToNot(HaveOccurred())
-		minioClient, err := minio.New(fmt.Sprintf("localhost:%d", pf.LocalPort), &minio.Options{
-			Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-			Secure: false,
-		})
-		Expect(err).ToNot(HaveOccurred())
-		_, err = minioClient.ListBuckets(context.Background())
+		pod := mustGetReadyMinioPod(rls)
+		pf, err := NewPortForward(restConfig, pod, PortAny, 9000)
 		Expect(err).ToNot(HaveOccurred())
 		defer pf.Close()
+		Expect(checkMinioServer(fmt.Sprintf("localhost:%d", pf.LocalPort))).To(Succeed())
+	})
+	It("fails with invalid host port", func() {
+		rls := mustInstallMinio()
+		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
+		pod := mustGetReadyMinioPod(rls)
+		pf, err := NewPortForward(restConfig, pod, 999999, 9000)
+		Expect(err).To(HaveOccurred())
+		Expect(pf).To(BeNil())
+	})
+	It("fails for non-existing pod", func() {
+		var pod corev1.Pod
+		pod.ObjectMeta.Namespace = "default"
+		pod.ObjectMeta.Name = "doesnotexist"
+		pf, err := NewPortForward(restConfig, &pod, PortAny, 9000)
+		Expect(err).To(HaveOccurred())
+		Expect(pf).To(BeNil())
+	})
+	It("fails with invalid REST config", func() {
+		rls := mustInstallMinio()
+		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
+		pod := mustGetReadyMinioPod(rls)
+		brokenRESTConfig, err := cluster.GetRESTConfig()
+		Expect(err).ToNot(HaveOccurred())
+		brokenRESTConfig.Host = ""
+		pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 9000)
+		Expect(err).To(HaveOccurred())
+		Expect(pf).To(BeNil())
 	})
 })
