@@ -59,7 +59,7 @@ func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
 		client.MatchingLabels{"release": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
 	pod := pods.Items[0]
-	Expect(WaitUntilReady(restConfig, &pod, 60*time.Second)).To(Succeed())
+	Expect(WaitUntilPodReady(restConfig, &pod, 60*time.Second)).To(Succeed())
 	return &pod
 }
 

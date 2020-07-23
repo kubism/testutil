@@ -111,7 +111,7 @@ func IsReady(pod *corev1.Pod) bool {
 	return true
 }
 
-func WaitUntilReady(restConfig *rest.Config, pod *corev1.Pod, timeout time.Duration) error {
+func WaitUntilPodReady(restConfig *rest.Config, pod *corev1.Pod, timeout time.Duration) error {
 	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme.Scheme})
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
