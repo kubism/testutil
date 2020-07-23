@@ -1,37 +1,31 @@
 language: go
 dist: xenial
 os: linux
-
 go:
-  - 1.14.x
+- 1.14.x
 services:
-  - docker
+- docker
 cache:
   directories:
-    - $HOME/.cache/go-build
-    - $HOME/gopath/pkg/mod
-
+  - "$HOME/.cache/go-build"
+  - "$HOME/gopath/pkg/mod"
 git:
-  ## depth set to false overrides travis default behavior to use shallow clones
-  ## with depth 50 that can cause issues
-  ##
-  ## ref: https://github.com/jupyterhub/chartpress#shallow-clones
-  ##
   depth: false
-
 stages:
-  - name: lint and test
-
+- name: lint and test
 jobs:
   include:
-    - stage: lint and test
-      name: run tests
-      script:
-        - make test
-      # after_success:
-      #   - make coverage
+  - stage: lint and test
+    name: run tests
+    script:
+    - make test
+    after_success:
+    - make coverage
 
-    - stage: lint and test
-      name: lint code
-      script:
-        - make lint
+  - stage: lint and test
+    name: lint code
+    script:
+    - make lint
+env:
+  global:
+    secure: c6boxG4zrwQCy8YlKyO92x8TWy3o1VhOBqwTNs9TfPpLACNQS/tCOfHCUvclDwPfgRRdK36WHLOjK7W9Ki9iaSaqiKgm1BvJ4aRO/uhy4V4GFv8j5+gN+f++ouqKOBxk+x8D/REIpTqdUG05UToUT0pogCvAvdc6wN8djv25YG0guwBshol+F3/gb42e2K92IFlJLBEw5cr7P5XMXDcEeF5Gtig42CcpTBJ3uy+Z/4tyxdI41hT905WXOZANikMcwQjHlOYxee6M9sKfM2I09tO0KBFnv56riMDwzRGjvifpJ0h2btTF4JWbhAokGNPpjf689Fwg2mcvh+gC330yNzGEqQknukAQF1o4zrAJR1dWNIhp0W+sdmBL/xa3Z4VPXgAGsCw0jynkg4mjasfPxtaDbKDczkpRQSk7CbS9wc7FrKX45k8NClf/dRVTuDq6nfR33U2Ku/VyjEVjPM3kBK3DEA+fqx4MJs3RYbsUUpOmC0S2+b15vRTzNlruRYWPel+L17D9a0gvORoX7y+9+vadox97C9AJcd1bmsB+jFGhpl73BedAlzDxhtM475nEL9izRJc+kZUArz4h0hTcz+f8ENQN59UxWpILP0gHlRrOJz5FjVQTrJi40rVUnmTEZ/8j1lRbAOznTHqkGAPpKWzy1mJ/Wr6Q1oUbPkNQSLg=
