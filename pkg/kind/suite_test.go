@@ -19,6 +19,8 @@ package kind
 import (
 	"testing"
 
+	_ "github.com/kubism/testutil/internal/flags"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

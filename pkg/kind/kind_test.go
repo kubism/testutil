@@ -35,11 +35,19 @@ func mustNewCluster(opts ...ClusterOption) *Cluster {
 }
 
 var _ = Describe("Cluster", func() {
-	It("can be created", func() {
-		Context("with no options", func() {
-			cluster := mustNewCluster()
-			Expect(cluster.Close()).To(Succeed())
-		})
+	It("can be created and works with existing", func() {
+		cluster := mustNewCluster(
+			ClusterWithWaitForReady(3*time.Minute),
+			ClusterWithName("testutilkindcreate"),
+			ClusterWithDocker(),
+		)
+		existingCluster := mustNewCluster(
+			ClusterWithName("testutilkindcreate"),
+			ClusterUseExisting(),
+			ClusterDoNotDelete(),
+		)
+		Expect(existingCluster.Close()).To(Succeed())
+		Expect(cluster.Close()).To(Succeed())
 	})
 	It("is functional", func() {
 		cluster := mustNewCluster(ClusterWithWaitForReady(3 * time.Minute))
@@ -53,4 +61,14 @@ var _ = Describe("Cluster", func() {
 		var ns corev1.Namespace
 		Expect(k8sClient.Get(context.Background(), client.ObjectKey{Name: "kube-system"}, &ns)).To(Succeed())
 	})
+	// TODO: Once podman in kind is stable, re-enable the test.
+	//       Currently has been hit and miss with current kind version,
+	//       depending on host podman version.
+	// It("works with podman", func() {
+	// 	cluster := mustNewCluster(
+	// 		ClusterWithWaitForReady(3*time.Minute),
+	// 		ClusterWithPodman(),
+	// 	)
+	// 	Expect(cluster.Close()).To(Succeed())
+	// })
 })
