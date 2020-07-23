@@ -116,7 +116,6 @@ type Client struct {
 	actionConfig *action.Configuration
 	tempDir      *fs.TempDir
 	repoFile     *repo.File
-	indexFiles   map[string]*repo.IndexFile
 }
 
 func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
@@ -149,7 +148,6 @@ func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 		actionConfig: actionConfig,
 		tempDir:      tempDir,
 		repoFile:     repo.NewFile(),
-		indexFiles:   map[string]*repo.IndexFile{},
 	}
 	if err := os.Mkdir(c.getCacheDir(), 0755); err != nil {
 		c.Close()
@@ -200,16 +198,11 @@ func (c *Client) AddRepository(cfg *RepositoryEntry) error {
 		Client:    client,
 		CachePath: c.getCacheDir(),
 	}
-	fname, err := r.DownloadIndexFile()
-	if err != nil {
-		return err
-	}
-	indexFile, err := repo.LoadIndexFile(fname)
+	_, err = r.DownloadIndexFile()
 	if err != nil {
 		return err
 	}
 	c.repoFile.Add(cfg)
-	c.indexFiles[cfg.Name] = indexFile
 	return c.writeRepoFile()
 }
 
