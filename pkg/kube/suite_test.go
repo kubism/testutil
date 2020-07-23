@@ -17,6 +17,8 @@ limitations under the License.
 package kube
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -24,11 +26,19 @@ import (
 	"github.com/kubism/testutil/pkg/helm"
 	"github.com/kubism/testutil/pkg/kind"
 
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+)
+
+const (
+	accessKeyID     = "TESTACCESSKEY"
+	secretAccessKey = "TESTSECRETKEY"
 )
 
 var (
@@ -88,3 +98,41 @@ var _ = AfterSuite(func() {
 		cluster.Close()
 	}
 })
+
+func mustInstallMinio() *helm.Release {
+	rls, err := helmClient.Install("stable/minio", "", helm.ValuesOptions{
+		StringValues: []string{
+			fmt.Sprintf("accessKey=%s", accessKeyID),
+			fmt.Sprintf("secretKey=%s", secretAccessKey),
+			"readinessProbe.initialDelaySeconds=10",
+		},
+	})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(rls).ToNot(BeNil())
+	return rls
+}
+
+func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
+	ctx := context.Background()
+	pods := &corev1.PodList{}
+	deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
+	Expect(WaitUntilDeploymentScheduled(restConfig, deployment, 30*time.Second)).To(Succeed())
+	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
+		client.MatchingLabels{"release": rls.Name})).To(Succeed())
+	Expect(len(pods.Items)).To(BeNumerically(">", 0))
+	pod := pods.Items[0]
+	Expect(WaitUntilPodReady(restConfig, &pod, 60*time.Second)).To(Succeed())
+	return &pod
+}
+
+func checkMinioServer(addr string) error {
+	minioClient, err := minio.New(addr, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: false,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = minioClient.ListBuckets(context.Background())
+	return err
+}

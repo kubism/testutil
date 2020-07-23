@@ -17,63 +17,13 @@ limitations under the License.
 package kube
 
 import (
-	"context"
 	"fmt"
-	"time"
 
-	"github.com/kubism/testutil/pkg/helm"
-
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-const (
-	accessKeyID     = "TESTACCESSKEY"
-	secretAccessKey = "TESTSECRETKEY"
-)
-
-func mustInstallMinio() *helm.Release {
-	rls, err := helmClient.Install("stable/minio", "", helm.ValuesOptions{
-		StringValues: []string{
-			fmt.Sprintf("accessKey=%s", accessKeyID),
-			fmt.Sprintf("secretKey=%s", secretAccessKey),
-			"readinessProbe.initialDelaySeconds=10",
-		},
-	})
-	Expect(err).ToNot(HaveOccurred())
-	Expect(rls).ToNot(BeNil())
-	return rls
-}
-
-func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
-	ctx := context.Background()
-	pods := &corev1.PodList{}
-	// TODO: The following is actually introducing a race condition!
-	//       We should wait until all pods of deployment are schedule.
-	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
-		client.MatchingLabels{"release": rls.Name})).To(Succeed())
-	Expect(len(pods.Items)).To(BeNumerically(">", 0))
-	pod := pods.Items[0]
-	Expect(WaitUntilPodReady(restConfig, &pod, 60*time.Second)).To(Succeed())
-	return &pod
-}
-
-func checkMinioServer(addr string) error {
-	minioClient, err := minio.New(addr, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		Secure: false,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = minioClient.ListBuckets(context.Background())
-	return err
-}
 
 var _ = Describe("PortForward", func() {
 	It("can portforward existing pod", func() {
@@ -102,10 +52,10 @@ var _ = Describe("PortForward", func() {
 		Expect(pf).To(BeNil())
 	})
 	It("fails with invalid REST config", func() {
+		rls := mustInstallMinio()
+		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
+		pod := mustGetReadyMinioPod(rls)
 		Context("empty host", func() {
-			rls := mustInstallMinio()
-			defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-			pod := mustGetReadyMinioPod(rls)
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())
 			brokenRESTConfig.Host = ""
@@ -114,9 +64,6 @@ var _ = Describe("PortForward", func() {
 			Expect(pf).To(BeNil())
 		})
 		Context("missing CA", func() {
-			rls := mustInstallMinio()
-			defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-			pod := mustGetReadyMinioPod(rls)
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())
 			brokenRESTConfig.CAFile = ""

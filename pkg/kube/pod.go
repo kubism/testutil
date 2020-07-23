@@ -99,7 +99,7 @@ func (pf *PortForward) Close() error {
 	return nil
 }
 
-func IsReady(pod *corev1.Pod) bool {
+func IsPodReady(pod *corev1.Pod) bool {
 	if pod.Status.ContainerStatuses == nil {
 		return false
 	}
@@ -122,7 +122,7 @@ func WaitUntilPodReady(restConfig *rest.Config, pod *corev1.Pod, timeout time.Du
 	if err != nil {
 		return err
 	}
-	for !IsReady(pod) {
+	for !IsPodReady(pod) {
 		err := k8sClient.Get(ctx, objectKey, pod)
 		if err != nil {
 			return err
