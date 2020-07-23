@@ -72,6 +72,7 @@ func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort
 	case err := <-errorCh:
 		return nil, err
 	case <-time.After(30 * time.Second):
+		pf.Close()
 		return nil, fmt.Errorf("port-forward did not become ready in time")
 	}
 }
