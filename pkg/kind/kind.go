@@ -81,68 +81,60 @@ type clusterOptions struct {
 }
 
 type ClusterOption interface {
-	apply(*clusterOptions) error
+	apply(*clusterOptions)
 }
 
-type clusterOptionAdapter func(*clusterOptions) error
+type clusterOptionAdapter func(*clusterOptions)
 
-func (c clusterOptionAdapter) apply(o *clusterOptions) error {
-	return c(o)
+func (c clusterOptionAdapter) apply(o *clusterOptions) {
+	c(o)
 }
 
 func ClusterWithName(name string) ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.Name = name
-		return nil
 	})
 }
 
 func ClusterUseExisting() ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.UseExisting = true
-		return nil
 	})
 }
 
 func ClusterDoNotDelete() ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.DoNotDelete = true
-		return nil
 	})
 }
 
 func ClusterWithWaitForReady(waitTime time.Duration) ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithWaitForReady(waitTime))
-		return nil
 	})
 }
 
 func ClusterWithConfig(config *Config) ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.ClusterOpts = append(o.ClusterOpts, cluster.CreateWithV1Alpha4Config(config))
-		return nil
 	})
 }
 
 func ClusterWithDocker() ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithDocker())
-		return nil
 	})
 }
 
 func ClusterWithPodman() ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithPodman())
-		return nil
 	})
 }
 
 func ClusterWithDebugLog(debugLog DebugLog) ClusterOption {
-	return clusterOptionAdapter(func(o *clusterOptions) error {
+	return clusterOptionAdapter(func(o *clusterOptions) {
 		o.ProviderOpts = append(o.ProviderOpts, cluster.ProviderWithLogger(debugLogger{debugLog}))
-		return nil
 	})
 }
 
@@ -163,10 +155,7 @@ func NewCluster(opts ...ClusterOption) (*Cluster, error) {
 		Name: rand.String(10),
 	}
 	for _, opt := range opts {
-		err := opt.apply(&o)
-		if err != nil {
-			return nil, err
-		}
+		opt.apply(&o)
 	}
 	provider := cluster.NewProvider(o.ProviderOpts...)
 	exists := false

@@ -94,33 +94,30 @@ type clientOptions struct {
 }
 
 type ClientOption interface {
-	apply(*clientOptions) error
+	apply(*clientOptions)
 }
 
-type clientOptionAdapter func(*clientOptions) error
+type clientOptionAdapter func(*clientOptions)
 
-func (c clientOptionAdapter) apply(o *clientOptions) error {
-	return c(o)
+func (c clientOptionAdapter) apply(o *clientOptions) {
+	c(o)
 }
 
 func ClientWithNamespace(namespace string) ClientOption {
-	return clientOptionAdapter(func(o *clientOptions) error {
+	return clientOptionAdapter(func(o *clientOptions) {
 		o.Namespace = namespace
-		return nil
 	})
 }
 
 func ClientWithDriver(driver string) ClientOption {
-	return clientOptionAdapter(func(o *clientOptions) error {
+	return clientOptionAdapter(func(o *clientOptions) {
 		o.Driver = driver
-		return nil
 	})
 }
 
 func ClientWithDebugLog(debugLog DebugLog) ClientOption {
-	return clientOptionAdapter(func(o *clientOptions) error {
+	return clientOptionAdapter(func(o *clientOptions) {
 		o.DebugLog = debugLog
-		return nil
 	})
 }
 
@@ -139,10 +136,7 @@ func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 		DebugLog:  func(format string, v ...interface{}) {},
 	}
 	for _, opt := range opts {
-		err := opt.apply(&options)
-		if err != nil {
-			return nil, err
-		}
+		opt.apply(&options)
 	}
 	actionConfig := new(action.Configuration)
 	clientGetter := &restClientGetter{
@@ -240,19 +234,18 @@ type installOptions struct {
 }
 
 type InstallOption interface {
-	apply(*installOptions) error
+	apply(*installOptions)
 }
 
-type installOptionAdapter func(*installOptions) error
+type installOptionAdapter func(*installOptions)
 
-func (c installOptionAdapter) apply(o *installOptions) error {
-	return c(o)
+func (c installOptionAdapter) apply(o *installOptions) {
+	c(o)
 }
 
 func InstallWithReleaseName(name string) InstallOption {
-	return installOptionAdapter(func(o *installOptions) error {
+	return installOptionAdapter(func(o *installOptions) {
 		o.ReleaseName = name
-		return nil
 	})
 }
 
@@ -264,10 +257,7 @@ func (c *Client) Install(chartName, version string, valuesOptions ValuesOptions,
 	options.Namespace = "default"
 	options.Version = version
 	for _, opt := range opts {
-		err := opt.apply(&options)
-		if err != nil {
-			return nil, err
-		}
+		opt.apply(&options)
 	}
 	settings := c.createEnvSettings(options.Namespace)
 	fname, err := options.LocateChart(chartName, settings)
