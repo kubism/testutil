@@ -74,3 +74,21 @@ var _ = Describe("PortForward", func() {
 		})
 	})
 })
+
+var _ = Describe("GetPodLogs", func() {
+	It("can get logs of existing pod", func() {
+		pod := mustGetReadyNginxPod(nginxRelease)
+		logs, err := GetPodLogsString(restConfig, pod)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(logs)).To(BeNumerically(">", 0))
+	})
+	It("fails with invalid REST config", func() {
+		pod := mustGetReadyNginxPod(nginxRelease)
+		brokenRESTConfig, err := cluster.GetRESTConfig()
+		Expect(err).ToNot(HaveOccurred())
+		brokenRESTConfig.CAFile = ""
+		brokenRESTConfig.CAData = []byte{}
+		_, err = GetPodLogsString(brokenRESTConfig, pod)
+		Expect(err).To(HaveOccurred())
+	})
+})

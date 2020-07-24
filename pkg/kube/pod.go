@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,6 +30,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
@@ -129,4 +131,28 @@ func WaitUntilPodReady(restConfig *rest.Config, pod *corev1.Pod, timeout time.Du
 		}
 	}
 	return nil
+}
+
+func GetPodLogs(restConfig *rest.Config, pod *corev1.Pod) (io.ReadCloser, error) {
+	opts := corev1.PodLogOptions{}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
+	req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &opts)
+	return req.Stream(context.Background())
+}
+
+func GetPodLogsString(restConfig *rest.Config, pod *corev1.Pod) (string, error) {
+	readCloser, err := GetPodLogs(restConfig, pod)
+	if err != nil {
+		return "", err
+	}
+	defer readCloser.Close()
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, readCloser)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
