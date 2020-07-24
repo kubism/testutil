@@ -33,7 +33,6 @@ import (
 
 // Re-export cluster configuration for easier use
 type Config = v1alpha4.Cluster
-type NoopLogger = log.NoopLogger
 type DebugLog = func(string, ...interface{})
 
 // Helper to provide a simplified interface. Use just needs to pass in a printf
