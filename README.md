@@ -6,6 +6,22 @@
 [![Coverage Status](https://coveralls.io/repos/github/kubism/testutil/badge.svg?branch=master)](https://coveralls.io/github/kubism/testutil?branch=master)
 [![Maintainability](https://api.codeclimate.com/v1/badges/b75c438fc0c263a21024/maintainability)](https://codeclimate.com/github/kubism/testutil/maintainability)
 
+TODO: write introduction
+
+## Capabilities
+
+* kind.Cluster
+* helm.Client
+    * AddRepository
+    * Install
+    * Uninstall
+* kube.WaitUntilPodReady
+* kube.WaitUntilDeploymentScheduled
+* kube.WaitUntilDeploymentReady
+* kube.GetEvents
+* kube.GetPodLogs
+* kube.PortForward
+
 ## Notes (temporary)
 
 * uses panic do not use in live code just tests
@@ -14,5 +30,3 @@
 ## TODO
 
 * implement statefulset, daemonset helper
-* get all events for resource
-* get pod logs

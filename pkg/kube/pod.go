@@ -53,10 +53,7 @@ type PortForward struct {
 func NewPortForward(restConfig *rest.Config, pod *corev1.Pod, localPort, podPort int) (*PortForward, error) {
 	var err error
 	if localPort == PortAny {
-		localPort, err = misc.GetFreePort()
-		if err != nil {
-			return nil, err
-		}
+		localPort = misc.GetFreePort()
 	}
 	pf := &PortForward{
 		LocalPort:  localPort,

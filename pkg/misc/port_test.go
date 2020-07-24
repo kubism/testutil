@@ -26,8 +26,7 @@ import (
 
 var _ = Describe("GetFreePort", func() {
 	It("gets free port", func() {
-		port, err := GetFreePort()
-		Expect(err).ToNot(HaveOccurred())
+		port := GetFreePort()
 		Expect(port).To(BeNumerically(">", 0))
 		l, err := net.Listen("tcp", "localhost"+":"+strconv.Itoa(port))
 		Expect(err).ToNot(HaveOccurred())
