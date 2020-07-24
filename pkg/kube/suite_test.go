@@ -39,7 +39,7 @@ import (
 const (
 	accessKeyID     = "TESTACCESSKEY"
 	secretAccessKey = "TESTSECRETKEY"
-	timeout         = 5 * time.Minute
+	timeout         = 10 * time.Minute
 )
 
 var (
