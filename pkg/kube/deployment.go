@@ -55,9 +55,10 @@ func IsDeploymentReady(deployment *appsv1.Deployment) bool {
 	if deployment.Spec.Replicas != nil {
 		replicas = *deployment.Spec.Replicas
 	}
-	return deployment.Status.ReadyReplicas == replicas &&
-		deployment.Status.UpdatedReplicas == replicas
+	return deployment.Status.ReadyReplicas == replicas
 }
+
+// TODO: also add *DeploymentUpdated!?
 
 func waitUntilDeployment(restConfig *rest.Config, deployment *appsv1.Deployment, timeout time.Duration, check func(*appsv1.Deployment) bool) error {
 	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme.Scheme})
