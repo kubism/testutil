@@ -24,11 +24,16 @@ import (
 	"github.com/kubism/testutil/pkg/rand"
 )
 
+// TODO: add FileOption to allow users to properly set permissions for files
+
 type TempFile struct {
+	// Path of the temporary file
 	Path string
 }
 
-// TODO: add CreateOptions, e.g. for permissions
+// NewTempFile creates a new temporary file in a temporary directory.
+// The provided content is written to the file.
+// Make sure to always call Close once the file is not required anymore.
 func NewTempFile(content []byte) (*TempFile, error) {
 	dir, err := ioutil.TempDir("", "kubism-testutil")
 	if err != nil {
@@ -44,14 +49,17 @@ func NewTempFile(content []byte) (*TempFile, error) {
 	}, nil
 }
 
+// Close will remove the temporary directory containing the file.
 func (f *TempFile) Close() error {
 	return os.RemoveAll(filepath.Dir(f.Path))
 }
 
 type TempDir struct {
+	// Path to the temporary directory
 	Path string
 }
 
+// NewTempDir creates a new temporary directory.
 func NewTempDir() (*TempDir, error) {
 	path, err := ioutil.TempDir("", "kubism-testutil")
 	if err != nil {
@@ -62,6 +70,7 @@ func NewTempDir() (*TempDir, error) {
 	}, nil
 }
 
+// Close will remove the temporary directory.
 func (d *TempDir) Close() error {
 	return os.RemoveAll(d.Path)
 }
