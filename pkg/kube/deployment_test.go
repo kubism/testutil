@@ -17,8 +17,6 @@ limitations under the License.
 package kube
 
 import (
-	"time"
-
 	appsv1 "k8s.io/api/apps/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -52,7 +50,7 @@ var _ = Describe("WaitUntilDeploymentReady", func() {
 		rls := mustInstallMinio()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
-		Expect(WaitUntilDeploymentReady(restConfig, deployment, 120*time.Second)).To(Succeed())
+		Expect(WaitUntilDeploymentReady(restConfig, deployment, timeout)).To(Succeed())
 		Expect(IsDeploymentReady(deployment)).To(Equal(true))
 	})
 	It("fails with invalid REST config", func() {
@@ -61,10 +59,10 @@ var _ = Describe("WaitUntilDeploymentReady", func() {
 		brokenRESTConfig.CAFile = ""
 		brokenRESTConfig.CAData = []byte{}
 		deployment := MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
-		Expect(WaitUntilDeploymentReady(brokenRESTConfig, deployment, 120*time.Second)).NotTo(Succeed())
+		Expect(WaitUntilDeploymentReady(brokenRESTConfig, deployment, timeout)).NotTo(Succeed())
 	})
 	It("fails for non-existing deployment", func() {
-		Expect(WaitUntilDeploymentReady(restConfig, &appsv1.Deployment{}, 120*time.Second)).NotTo(Succeed())
+		Expect(WaitUntilDeploymentReady(restConfig, &appsv1.Deployment{}, timeout)).NotTo(Succeed())
 	})
 })
 
@@ -73,7 +71,7 @@ var _ = Describe("WaitUntilDeploymentScheduled", func() {
 		rls := mustInstallMinio()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
-		Expect(WaitUntilDeploymentScheduled(restConfig, deployment, 120*time.Second)).To(Succeed())
+		Expect(WaitUntilDeploymentScheduled(restConfig, deployment, timeout)).To(Succeed())
 		Expect(IsDeploymentScheduled(deployment)).To(Equal(true))
 	})
 })

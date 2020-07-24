@@ -39,6 +39,7 @@ import (
 const (
 	accessKeyID     = "TESTACCESSKEY"
 	secretAccessKey = "TESTSECRETKEY"
+	timeout         = 5 * time.Minute
 )
 
 var (
@@ -58,7 +59,7 @@ var _ = BeforeSuite(func(done Done) {
 	var err error
 	By("setup kind cluster")
 	clusterOptions := []kind.ClusterOption{
-		kind.ClusterWithWaitForReady(5 * time.Minute),
+		kind.ClusterWithWaitForReady(timeout),
 	}
 	if flags.KindCluster != "" {
 		clusterOptions = append(clusterOptions,
@@ -123,12 +124,12 @@ func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
 	ctx := context.Background()
 	pods := &corev1.PodList{}
 	deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
-	Expect(WaitUntilDeploymentScheduled(restConfig, deployment, 120*time.Second)).To(Succeed())
+	Expect(WaitUntilDeploymentScheduled(restConfig, deployment, timeout)).To(Succeed())
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
 		client.MatchingLabels{"release": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
 	pod := pods.Items[0]
-	Expect(WaitUntilPodReady(restConfig, &pod, 120*time.Second)).To(Succeed())
+	Expect(WaitUntilPodReady(restConfig, &pod, timeout)).To(Succeed())
 	return &pod
 }
 
