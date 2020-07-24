@@ -19,6 +19,7 @@ package kube
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -26,8 +27,6 @@ import (
 	"github.com/kubism/testutil/pkg/helm"
 	"github.com/kubism/testutil/pkg/kind"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,9 +36,7 @@ import (
 )
 
 const (
-	accessKeyID     = "TESTACCESSKEY"
-	secretAccessKey = "TESTSECRETKEY"
-	timeout         = 5 * time.Minute
+	timeout = 5 * time.Minute
 )
 
 var (
@@ -47,7 +44,7 @@ var (
 	helmClient   *helm.Client
 	k8sClient    client.Client
 	restConfig   *rest.Config
-	minioRelease *helm.Release
+	nginxRelease *helm.Release
 )
 
 func TestHelm(t *testing.T) {
@@ -77,8 +74,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).To(Succeed())
 	Expect(helmClient).ToNot(BeNil())
 	Expect(helmClient.AddRepository(&helm.RepositoryEntry{
-		Name: "stable",
-		URL:  "https://kubernetes-charts.storage.googleapis.com",
+		Name: "bitnami",
+		URL:  "https://charts.bitnami.com/bitnami",
 	})).To(Succeed())
 	By("setup k8s client")
 	k8sClient, err = cluster.GetClient()
@@ -87,15 +84,15 @@ var _ = BeforeSuite(func(done Done) {
 	restConfig, err = cluster.GetRESTConfig()
 	Expect(err).To(Succeed())
 	Expect(restConfig).ToNot(BeNil())
-	By("setup prepared minio release")
-	minioRelease = mustInstallMinio()
+	By("setup prepared nginx release")
+	nginxRelease = mustInstallNginx()
 	close(done)
 }, 300)
 
 var _ = AfterSuite(func() {
-	By("uninstalling minio release")
-	if minioRelease != nil {
-		_ = helmClient.Uninstall(minioRelease.Name)
+	By("uninstalling nginx release")
+	if nginxRelease != nil {
+		_ = helmClient.Uninstall(nginxRelease.Name)
 	}
 	By("cleaning up helm client")
 	if helmClient != nil {
@@ -107,29 +104,23 @@ var _ = AfterSuite(func() {
 	}
 })
 
-func mustInstallMinio() *helm.Release {
-	By("helm install stable/minio")
-	rls, err := helmClient.Install("stable/minio", "", helm.ValuesOptions{
-		StringValues: []string{
-			fmt.Sprintf("accessKey=%s", accessKeyID),
-			fmt.Sprintf("secretKey=%s", secretAccessKey),
-			"readinessProbe.initialDelaySeconds=10",
-		},
-	})
+func mustInstallNginx() *helm.Release {
+	By("helm install bitnami/nginx")
+	rls, err := helmClient.Install("bitnami/nginx", "", helm.ValuesOptions{})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(rls).ToNot(BeNil())
 	By(fmt.Sprintf("helm installed %s", rls.Name))
 	return rls
 }
 
-func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
+func mustGetReadyNginxPod(rls *helm.Release) *corev1.Pod {
 	ctx := context.Background()
 	pods := &corev1.PodList{}
-	deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
-	By(fmt.Sprintf("waiting until deployment %s-minio is scheduled", rls.Name))
+	deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-nginx")
+	By(fmt.Sprintf("waiting until deployment %s-nginx is scheduled", rls.Name))
 	Expect(WaitUntilDeploymentScheduled(restConfig, deployment, timeout)).To(Succeed())
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
-		client.MatchingLabels{"release": rls.Name})).To(Succeed())
+		client.MatchingLabels{"app.kubernetes.io/instance": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
 	pod := pods.Items[0]
 	By("waiting until pod is ready")
@@ -137,15 +128,14 @@ func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
 	return &pod
 }
 
-func checkMinioServer(addr string) error {
-	By("connecting to minio server")
-	minioClient, err := minio.New(addr, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		Secure: false,
-	})
+func checkNginxServer(url string) error {
+	resp, err := http.Get(url)
 	if err != nil {
 		return err
 	}
-	_, err = minioClient.ListBuckets(context.Background())
-	return err
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Expected 200 got %d", resp.StatusCode)
+	}
+	return nil
 }

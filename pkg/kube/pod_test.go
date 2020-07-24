@@ -27,20 +27,20 @@ import (
 
 var _ = Describe("PortForward", func() {
 	It("can portforward existing pod", func() {
-		rls := mustInstallMinio()
+		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		pod := mustGetReadyMinioPod(rls)
+		pod := mustGetReadyNginxPod(rls)
 		By("creating port-forward")
-		pf, err := NewPortForward(restConfig, pod, PortAny, 9000)
+		pf, err := NewPortForward(restConfig, pod, PortAny, 8080)
 		Expect(err).ToNot(HaveOccurred())
 		defer pf.Close()
-		Expect(checkMinioServer(fmt.Sprintf("localhost:%d", pf.LocalPort))).To(Succeed())
+		Expect(checkNginxServer(fmt.Sprintf("http://localhost:%d", pf.LocalPort))).To(Succeed())
 	})
 	It("fails with invalid host port", func() {
-		rls := mustInstallMinio()
+		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		pod := mustGetReadyMinioPod(rls)
-		pf, err := NewPortForward(restConfig, pod, 999999, 9000)
+		pod := mustGetReadyNginxPod(rls)
+		pf, err := NewPortForward(restConfig, pod, 999999, 8080)
 		Expect(err).To(HaveOccurred())
 		Expect(pf).To(BeNil())
 	})
@@ -48,27 +48,27 @@ var _ = Describe("PortForward", func() {
 		var pod corev1.Pod
 		pod.ObjectMeta.Namespace = "default"
 		pod.ObjectMeta.Name = "doesnotexist"
-		pf, err := NewPortForward(restConfig, &pod, PortAny, 9000)
+		pf, err := NewPortForward(restConfig, &pod, PortAny, 8080)
 		Expect(err).To(HaveOccurred())
 		Expect(pf).To(BeNil())
 	})
 	It("fails with invalid REST config", func() {
 		Context("empty host", func() {
-			pod := mustGetReadyMinioPod(minioRelease)
+			pod := mustGetReadyNginxPod(nginxRelease)
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())
 			brokenRESTConfig.Host = ""
-			pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 9000)
+			pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 8080)
 			Expect(err).To(HaveOccurred())
 			Expect(pf).To(BeNil())
 		})
 		Context("missing CA", func() {
-			pod := mustGetReadyMinioPod(minioRelease)
+			pod := mustGetReadyNginxPod(nginxRelease)
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())
 			brokenRESTConfig.CAFile = ""
 			brokenRESTConfig.CAData = []byte{}
-			pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 9000)
+			pf, err := NewPortForward(brokenRESTConfig, pod, PortAny, 8080)
 			Expect(err).To(HaveOccurred())
 			Expect(pf).To(BeNil())
 		})

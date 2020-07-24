@@ -26,12 +26,12 @@ import (
 var _ = Describe("MustGetDeployment", func() {
 	It("works for existing deployment", func() {
 		Expect(func() {
-			_ = MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
+			_ = MustGetDeployment(restConfig, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
 		}).ShouldNot(Panic())
 	})
 	It("panics if deployment does not exist", func() {
 		Expect(func() {
-			_ = MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-thiscantexist")
+			_ = MustGetDeployment(restConfig, nginxRelease.Namespace, nginxRelease.Name+"-thiscantexist")
 		}).Should(Panic())
 	})
 	It("panics with invalid REST config", func() {
@@ -40,16 +40,16 @@ var _ = Describe("MustGetDeployment", func() {
 		brokenRESTConfig.CAFile = ""
 		brokenRESTConfig.CAData = []byte{}
 		Expect(func() {
-			_ = MustGetDeployment(brokenRESTConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
+			_ = MustGetDeployment(brokenRESTConfig, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
 		}).Should(Panic())
 	})
 })
 
 var _ = Describe("WaitUntilDeploymentReady", func() {
 	It("waits until ready", func() {
-		rls := mustInstallMinio()
+		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
+		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-nginx")
 		Expect(WaitUntilDeploymentReady(restConfig, deployment, timeout)).To(Succeed())
 		Expect(IsDeploymentReady(deployment)).To(Equal(true))
 	})
@@ -58,7 +58,7 @@ var _ = Describe("WaitUntilDeploymentReady", func() {
 		Expect(err).ToNot(HaveOccurred())
 		brokenRESTConfig.CAFile = ""
 		brokenRESTConfig.CAData = []byte{}
-		deployment := MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
+		deployment := MustGetDeployment(restConfig, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
 		Expect(WaitUntilDeploymentReady(brokenRESTConfig, deployment, timeout)).NotTo(Succeed())
 	})
 	It("fails for non-existing deployment", func() {
@@ -68,9 +68,9 @@ var _ = Describe("WaitUntilDeploymentReady", func() {
 
 var _ = Describe("WaitUntilDeploymentScheduled", func() {
 	It("waits until scheduled", func() {
-		rls := mustInstallMinio()
+		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
+		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-nginx")
 		Expect(WaitUntilDeploymentScheduled(restConfig, deployment, timeout)).To(Succeed())
 		Expect(IsDeploymentScheduled(deployment)).To(Equal(true))
 	})
