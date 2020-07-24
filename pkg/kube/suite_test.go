@@ -42,10 +42,11 @@ const (
 )
 
 var (
-	cluster    *kind.Cluster
-	helmClient *helm.Client
-	k8sClient  client.Client
-	restConfig *rest.Config
+	cluster      *kind.Cluster
+	helmClient   *helm.Client
+	k8sClient    client.Client
+	restConfig   *rest.Config
+	minioRelease *helm.Release
 )
 
 func TestHelm(t *testing.T) {
@@ -85,10 +86,16 @@ var _ = BeforeSuite(func(done Done) {
 	restConfig, err = cluster.GetRESTConfig()
 	Expect(err).To(Succeed())
 	Expect(restConfig).ToNot(BeNil())
+	By("setup prepared minio release")
+	minioRelease = mustInstallMinio()
 	close(done)
 }, 120)
 
 var _ = AfterSuite(func() {
+	By("uninstalling minio release")
+	if minioRelease != nil {
+		_ = helmClient.Uninstall(minioRelease.Name)
+	}
 	By("cleaning up helm client")
 	if helmClient != nil {
 		helmClient.Close()

@@ -59,10 +59,8 @@ func IsDeploymentReady(deployment *appsv1.Deployment) bool {
 		deployment.Status.UpdatedReplicas == replicas
 }
 
-func WaitUntilDeploymentScheduled(restConfig *rest.Config, deployment *appsv1.Deployment, timeout time.Duration) error {
+func waitUntilDeployment(restConfig *rest.Config, deployment *appsv1.Deployment, timeout time.Duration, check func(*appsv1.Deployment) bool) error {
 	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme.Scheme})
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	if err != nil {
 		return err
 	}
@@ -70,7 +68,9 @@ func WaitUntilDeploymentScheduled(restConfig *rest.Config, deployment *appsv1.De
 	if err != nil {
 		return err
 	}
-	for !IsDeploymentScheduled(deployment) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for !check(deployment) {
 		err := k8sClient.Get(ctx, objectKey, deployment)
 		if err != nil {
 			return err
@@ -79,22 +79,10 @@ func WaitUntilDeploymentScheduled(restConfig *rest.Config, deployment *appsv1.De
 	return nil
 }
 
+func WaitUntilDeploymentScheduled(restConfig *rest.Config, deployment *appsv1.Deployment, timeout time.Duration) error {
+	return waitUntilDeployment(restConfig, deployment, timeout, IsDeploymentScheduled)
+}
+
 func WaitUntilDeploymentReady(restConfig *rest.Config, deployment *appsv1.Deployment, timeout time.Duration) error {
-	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme.Scheme})
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	if err != nil {
-		return err
-	}
-	objectKey, err := client.ObjectKeyFromObject(deployment)
-	if err != nil {
-		return err
-	}
-	for !IsDeploymentReady(deployment) {
-		err := k8sClient.Get(ctx, objectKey, deployment)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return waitUntilDeployment(restConfig, deployment, timeout, IsDeploymentReady)
 }

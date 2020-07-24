@@ -19,9 +19,33 @@ package kube
 import (
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+var _ = Describe("MustGetDeployment", func() {
+	It("works for existing deployment", func() {
+		Expect(func() {
+			_ = MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
+		}).ShouldNot(Panic())
+	})
+	It("panics if deployment does not exist", func() {
+		Expect(func() {
+			_ = MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-thiscantexist")
+		}).Should(Panic())
+	})
+	It("panics with invalid REST config", func() {
+		brokenRESTConfig, err := cluster.GetRESTConfig()
+		Expect(err).ToNot(HaveOccurred())
+		brokenRESTConfig.CAFile = ""
+		brokenRESTConfig.CAData = []byte{}
+		Expect(func() {
+			_ = MustGetDeployment(brokenRESTConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
+		}).Should(Panic())
+	})
+})
 
 var _ = Describe("WaitUntilDeploymentReady", func() {
 	It("waits until ready", func() {
@@ -30,6 +54,17 @@ var _ = Describe("WaitUntilDeploymentReady", func() {
 		deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
 		Expect(WaitUntilDeploymentReady(restConfig, deployment, 60*time.Second)).To(Succeed())
 		Expect(IsDeploymentReady(deployment)).To(Equal(true))
+	})
+	It("fails with invalid REST config", func() {
+		brokenRESTConfig, err := cluster.GetRESTConfig()
+		Expect(err).ToNot(HaveOccurred())
+		brokenRESTConfig.CAFile = ""
+		brokenRESTConfig.CAData = []byte{}
+		deployment := MustGetDeployment(restConfig, minioRelease.Namespace, minioRelease.Name+"-minio")
+		Expect(WaitUntilDeploymentReady(brokenRESTConfig, deployment, 60*time.Second)).NotTo(Succeed())
+	})
+	It("fails for non-existing deployment", func() {
+		Expect(WaitUntilDeploymentReady(restConfig, &appsv1.Deployment{}, 60*time.Second)).NotTo(Succeed())
 	})
 })
 

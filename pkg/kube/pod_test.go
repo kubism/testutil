@@ -52,9 +52,7 @@ var _ = Describe("PortForward", func() {
 		Expect(pf).To(BeNil())
 	})
 	It("fails with invalid REST config", func() {
-		rls := mustInstallMinio()
-		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
-		pod := mustGetReadyMinioPod(rls)
+		pod := mustGetReadyMinioPod(minioRelease)
 		Context("empty host", func() {
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())

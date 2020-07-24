@@ -18,6 +18,7 @@ package kind
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+func clusterFails() ClusterOption {
+	return clusterOptionAdapter(func(o *clusterOptions) error {
+		return fmt.Errorf("expected failure")
+	})
+}
 
 func mustNewCluster(opts ...ClusterOption) *Cluster {
 	cluster, err := NewCluster(opts...)
@@ -61,6 +68,15 @@ var _ = Describe("Cluster", func() {
 		Expect(k8sClient).ToNot(BeNil())
 		var ns corev1.Namespace
 		Expect(k8sClient.Get(context.Background(), client.ObjectKey{Name: "kube-system"}, &ns)).To(Succeed())
+		_, err = cluster.GetClient()
+		Expect(err).NotTo(HaveOccurred())
+		_, err = cluster.GetKubeConfigAsTempFile()
+		Expect(err).NotTo(HaveOccurred())
+	})
+	It("can not be created with failing option", func() {
+		cluster, err := NewCluster(clusterFails())
+		Expect(err).To(HaveOccurred())
+		Expect(cluster).To(BeNil())
 	})
 	// TODO: Once podman in kind is stable, re-enable the test.
 	//       Currently has been hit and miss with current kind version,
