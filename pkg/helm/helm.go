@@ -144,10 +144,6 @@ func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 			return nil, err
 		}
 	}
-	tempDir, err := fs.NewTempDir()
-	if err != nil {
-		return nil, err
-	}
 	actionConfig := new(action.Configuration)
 	clientGetter := &restClientGetter{
 		Namespace:  options.Namespace,
@@ -160,18 +156,28 @@ func NewClient(kubeConfig string, opts ...ClientOption) (*Client, error) {
 		kubeConfig:   kubeConfig,
 		options:      options,
 		actionConfig: actionConfig,
-		tempDir:      tempDir,
 		repoFile:     repo.NewFile(),
 	}
-	if err := os.Mkdir(c.getCacheDir(), 0755); err != nil {
-		c.Close()
-		return nil, err
-	}
-	if err := c.writeRepoFile(); err != nil {
+	if err := c.setupDirs(); err != nil {
 		c.Close()
 		return nil, err
 	}
 	return c, nil
+}
+
+func (c *Client) setupDirs() error {
+	var err error
+	c.tempDir, err = fs.NewTempDir()
+	if err != nil {
+		return err
+	}
+	if err := os.Mkdir(c.getCacheDir(), 0755); err != nil {
+		return err
+	}
+	if err := c.writeRepoFile(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) getCacheDir() string {
@@ -292,5 +298,8 @@ func (c *Client) Uninstall(releaseName string) error {
 }
 
 func (c *Client) Close() error {
-	return c.tempDir.Close()
+	if c.tempDir != nil {
+		return c.tempDir.Close()
+	}
+	return nil
 }
