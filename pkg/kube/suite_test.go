@@ -39,7 +39,7 @@ import (
 const (
 	accessKeyID     = "TESTACCESSKEY"
 	secretAccessKey = "TESTSECRETKEY"
-	timeout         = 10 * time.Minute
+	timeout         = 5 * time.Minute
 )
 
 var (
@@ -90,7 +90,7 @@ var _ = BeforeSuite(func(done Done) {
 	By("setup prepared minio release")
 	minioRelease = mustInstallMinio()
 	close(done)
-}, 120)
+}, 300)
 
 var _ = AfterSuite(func() {
 	By("uninstalling minio release")
@@ -108,6 +108,7 @@ var _ = AfterSuite(func() {
 })
 
 func mustInstallMinio() *helm.Release {
+	By("helm install stable/minio")
 	rls, err := helmClient.Install("stable/minio", "", helm.ValuesOptions{
 		StringValues: []string{
 			fmt.Sprintf("accessKey=%s", accessKeyID),
@@ -117,6 +118,7 @@ func mustInstallMinio() *helm.Release {
 	})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(rls).ToNot(BeNil())
+	By(fmt.Sprintf("helm installed %s", rls.Name))
 	return rls
 }
 
@@ -124,16 +126,19 @@ func mustGetReadyMinioPod(rls *helm.Release) *corev1.Pod {
 	ctx := context.Background()
 	pods := &corev1.PodList{}
 	deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-minio")
+	By(fmt.Sprintf("waiting until deployment %s-minio is scheduled", rls.Name))
 	Expect(WaitUntilDeploymentScheduled(restConfig, deployment, timeout)).To(Succeed())
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
 		client.MatchingLabels{"release": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
 	pod := pods.Items[0]
+	By("waiting until pod is ready")
 	Expect(WaitUntilPodReady(restConfig, &pod, timeout)).To(Succeed())
 	return &pod
 }
 
 func checkMinioServer(addr string) error {
+	By("connecting to minio server")
 	minioClient, err := minio.New(addr, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
 		Secure: false,

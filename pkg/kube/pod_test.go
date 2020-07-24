@@ -30,6 +30,7 @@ var _ = Describe("PortForward", func() {
 		rls := mustInstallMinio()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		pod := mustGetReadyMinioPod(rls)
+		By("creating port-forward")
 		pf, err := NewPortForward(restConfig, pod, PortAny, 9000)
 		Expect(err).ToNot(HaveOccurred())
 		defer pf.Close()
@@ -52,8 +53,8 @@ var _ = Describe("PortForward", func() {
 		Expect(pf).To(BeNil())
 	})
 	It("fails with invalid REST config", func() {
-		pod := mustGetReadyMinioPod(minioRelease)
 		Context("empty host", func() {
+			pod := mustGetReadyMinioPod(minioRelease)
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())
 			brokenRESTConfig.Host = ""
@@ -62,6 +63,7 @@ var _ = Describe("PortForward", func() {
 			Expect(pf).To(BeNil())
 		})
 		Context("missing CA", func() {
+			pod := mustGetReadyMinioPod(minioRelease)
 			brokenRESTConfig, err := cluster.GetRESTConfig()
 			Expect(err).ToNot(HaveOccurred())
 			brokenRESTConfig.CAFile = ""

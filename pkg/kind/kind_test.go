@@ -44,7 +44,7 @@ func mustNewCluster(opts ...ClusterOption) *Cluster {
 var _ = Describe("Cluster", func() {
 	It("can be created and works with existing", func() {
 		cluster := mustNewCluster(
-			ClusterWithWaitForReady(10*time.Minute),
+			ClusterWithWaitForReady(5*time.Minute),
 			ClusterWithName("testutilkindcreate"),
 			ClusterWithDocker(),
 			ClusterWithDebugLog(func(string, ...interface{}) {}),
@@ -58,7 +58,7 @@ var _ = Describe("Cluster", func() {
 		Expect(cluster.Close()).To(Succeed())
 	})
 	It("is functional", func() {
-		cluster := mustNewCluster(ClusterWithWaitForReady(10 * time.Minute))
+		cluster := mustNewCluster(ClusterWithWaitForReady(5 * time.Minute))
 		defer cluster.Close()
 		config, err := cluster.GetRESTConfig()
 		Expect(err).NotTo(HaveOccurred())
