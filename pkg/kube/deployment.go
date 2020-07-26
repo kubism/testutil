@@ -55,7 +55,8 @@ func IsDeploymentReady(deployment *appsv1.Deployment) bool {
 	if deployment.Spec.Replicas != nil {
 		replicas = *deployment.Spec.Replicas
 	}
-	return deployment.Status.ReadyReplicas == replicas
+	return deployment.Status.ReadyReplicas == replicas &&
+		deployment.Status.UpdatedReplicas == replicas
 }
 
 // TODO: also add *DeploymentUpdated!?
