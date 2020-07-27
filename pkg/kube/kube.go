@@ -220,24 +220,27 @@ func (c *Client) MustGetDeployment(ctx context.Context, namespace, name string) 
 	return deployment
 }
 
-func IsDeploymentScheduled(deployment *appsv1.Deployment) bool {
-	replicas := int32(1)
+func getDeploymentReplicas(deployment *appsv1.Deployment) int32 {
 	if deployment.Spec.Replicas != nil {
-		replicas = *deployment.Spec.Replicas
+		return *deployment.Spec.Replicas
 	}
+	return 1
+}
+
+func IsDeploymentScheduled(deployment *appsv1.Deployment) bool {
+	replicas := getDeploymentReplicas(deployment)
 	return deployment.Status.Replicas >= replicas
 }
 
 func IsDeploymentReady(deployment *appsv1.Deployment) bool {
-	replicas := int32(1)
-	if deployment.Spec.Replicas != nil {
-		replicas = *deployment.Spec.Replicas
-	}
-	return deployment.Status.ReadyReplicas == replicas &&
-		deployment.Status.UpdatedReplicas == replicas
+	replicas := getDeploymentReplicas(deployment)
+	return deployment.Status.ReadyReplicas == replicas
 }
 
-// TODO: also add *DeploymentUpdated!?
+func IsDeploymentUpdated(deployment *appsv1.Deployment) bool {
+	replicas := getDeploymentReplicas(deployment)
+	return deployment.Status.UpdatedReplicas == replicas
+}
 
 func (c *Client) WaitUntilDeploymentScheduled(ctx context.Context, deployment *appsv1.Deployment) error {
 	return c.waitUntil(ctx, deployment, func() bool {
@@ -248,6 +251,12 @@ func (c *Client) WaitUntilDeploymentScheduled(ctx context.Context, deployment *a
 func (c *Client) WaitUntilDeploymentReady(ctx context.Context, deployment *appsv1.Deployment) error {
 	return c.waitUntil(ctx, deployment, func() bool {
 		return IsDeploymentReady(deployment)
+	})
+}
+
+func (c *Client) WaitUntilDeploymentUpdated(ctx context.Context, deployment *appsv1.Deployment) error {
+	return c.waitUntil(ctx, deployment, func() bool {
+		return IsDeploymentUpdated(deployment)
 	})
 }
 

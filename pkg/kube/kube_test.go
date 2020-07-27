@@ -145,6 +145,18 @@ var _ = Describe("WaitUntilDeploymentScheduled", func() {
 	})
 })
 
+var _ = Describe("WaitUntilDeploymentUpdated", func() {
+	It("waits until updated", func() {
+		rls := mustInstallNginx()
+		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
+		Expect(k8sClient.WaitUntilDeploymentUpdated(ctx, deployment)).To(Succeed())
+		Expect(IsDeploymentUpdated(deployment)).To(Equal(true))
+	})
+})
+
 var _ = Describe("GetEvents", func() {
 	It("can get events for existing pod", func() {
 		pod := mustGetReadyNginxPod(nginxRelease)
