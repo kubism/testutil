@@ -123,14 +123,13 @@ func mustGetReadyNginxPod(rls *helm.Release) *corev1.Pod {
 	pods := &corev1.PodList{}
 	deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
 	By(fmt.Sprintf("waiting until deployment %s-nginx is scheduled", rls.Name))
-	Expect(k8sClient.WaitUntilDeploymentScheduled(ctx, deployment)).To(Succeed())
+	Expect(k8sClient.WaitUntil(ctx, DeploymentIsScheduled(deployment))).To(Succeed())
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
 		client.MatchingLabels{"app.kubernetes.io/instance": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
 	pod := pods.Items[0]
 	By("waiting until pod is ready")
-
-	Expect(k8sClient.WaitUntilPodReady(ctx, &pod)).To(Succeed())
+	Expect(k8sClient.WaitUntil(ctx, PodIsReady(&pod))).To(Succeed())
 	return &pod
 }
 

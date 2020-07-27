@@ -71,10 +71,31 @@ func ClientWithScheme(scheme *runtime.Scheme) ClientOption {
 	})
 }
 
-// Client is an extension to the controller-runtime Client, which provides
-// additional capabilities including port-forward and more.
+//
+type Condition interface {
+	check() bool
+	subject() runtime.Object
+}
+
+type conditionAdapter struct {
+	Check   func() bool
+	Subject runtime.Object
+}
+
+func (c conditionAdapter) check() bool {
+	return c.Check()
+}
+
+func (c conditionAdapter) subject() runtime.Object {
+	return c.Subject
+}
+
+// Client is an extension to the controller-runtime Client and client-go's
+// default Clientset, which provides additional capabilities including
+// port-forward and more.
 type Client struct {
 	client.Client
+	*kubernetes.Clientset
 	restConfig *rest.Config
 	scheme     *runtime.Scheme
 }
@@ -92,8 +113,13 @@ func NewClient(restConfig *rest.Config, opts ...ClientOption) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		Client:     k8sClient,
+		Clientset:  clientset,
 		restConfig: restConfig,
 		scheme:     options.Scheme,
 	}, nil
@@ -157,6 +183,152 @@ func (pf *PortForward) Close() error {
 	return nil
 }
 
+func (c *Client) WaitUntil(ctx context.Context, conditions ...Condition) error {
+	for _, condition := range conditions {
+		if err := c.waitUntil(ctx, condition.subject(), condition.check); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func IsPodReady(pod *corev1.Pod) bool {
+	if pod.Status.ContainerStatuses == nil {
+		return false
+	}
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if !containerStatus.Ready {
+			return false
+		}
+	}
+	return true
+}
+
+func PodIsReady(pod *corev1.Pod) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsPodReady(pod)
+		},
+		Subject: pod,
+	}
+}
+
+func getDeploymentReplicas(deployment *appsv1.Deployment) int32 {
+	if deployment.Spec.Replicas != nil {
+		return *deployment.Spec.Replicas
+	}
+	return 1
+}
+
+func IsDeploymentScheduled(deployment *appsv1.Deployment) bool {
+	replicas := getDeploymentReplicas(deployment)
+	return deployment.Status.Replicas >= replicas
+}
+
+func IsDeploymentReady(deployment *appsv1.Deployment) bool {
+	replicas := getDeploymentReplicas(deployment)
+	return deployment.Status.ReadyReplicas == replicas
+}
+
+func IsDeploymentUpdated(deployment *appsv1.Deployment) bool {
+	replicas := getDeploymentReplicas(deployment)
+	return deployment.Status.UpdatedReplicas == replicas
+}
+
+func DeploymentIsScheduled(deployment *appsv1.Deployment) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsDeploymentScheduled(deployment)
+		},
+		Subject: deployment,
+	}
+}
+
+func DeploymentIsReady(deployment *appsv1.Deployment) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsDeploymentReady(deployment)
+		},
+		Subject: deployment,
+	}
+}
+
+func DeploymentIsUpdated(deployment *appsv1.Deployment) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsDeploymentUpdated(deployment)
+		},
+		Subject: deployment,
+	}
+}
+
+func getReplicaSetReplicas(rs *appsv1.ReplicaSet) int32 {
+	if rs.Spec.Replicas != nil {
+		return *rs.Spec.Replicas
+	}
+	return 1
+}
+
+func IsReplicaSetAvailable(rs *appsv1.ReplicaSet) bool {
+	replicas := getReplicaSetReplicas(rs)
+	return rs.Status.AvailableReplicas == replicas
+}
+
+func IsReplicaSetReady(rs *appsv1.ReplicaSet) bool {
+	replicas := getReplicaSetReplicas(rs)
+	return rs.Status.ReadyReplicas == replicas
+}
+
+func ReplicaSetIsAvailable(rs *appsv1.ReplicaSet) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsReplicaSetAvailable(rs)
+		},
+		Subject: rs,
+	}
+}
+
+func ReplicaSetIsReady(rs *appsv1.ReplicaSet) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsReplicaSetReady(rs)
+		},
+		Subject: rs,
+	}
+}
+
+func IsJobActive(job *batchv1.Job) bool {
+	return job.Status.Active > 0
+}
+
+func JobIsActive(job *batchv1.Job) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsJobActive(job)
+		},
+		Subject: job,
+	}
+}
+
+func IsCronJobActive(cronJob *batchv1beta1.CronJob) bool {
+	if cronJob.Status.Active == nil {
+		return false
+	}
+	if len(cronJob.Status.Active) > 0 {
+		return true
+	}
+	return false
+}
+
+func CronJobIsActive(cronJob *batchv1beta1.CronJob) Condition {
+	return conditionAdapter{
+		Check: func() bool {
+			return IsCronJobActive(cronJob)
+		},
+		Subject: cronJob,
+	}
+}
+
 func (c *Client) MustGetPod(ctx context.Context, namespace, name string) *corev1.Pod {
 	pod := &corev1.Pod{}
 	c.mustGet(ctx, pod, namespace, name)
@@ -188,31 +360,9 @@ func (c *Client) GetPodsForJob(ctx context.Context, job *batchv1.Job) ([]corev1.
 	return c.GetPodsForOwner(ctx, job)
 }
 
-func IsPodReady(pod *corev1.Pod) bool {
-	if pod.Status.ContainerStatuses == nil {
-		return false
-	}
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		if !containerStatus.Ready {
-			return false
-		}
-	}
-	return true
-}
-
-func (c *Client) WaitUntilPodReady(ctx context.Context, pod *corev1.Pod) error {
-	return c.waitUntil(ctx, pod, func() bool {
-		return IsPodReady(pod)
-	})
-}
-
 func (c *Client) GetPodLogs(ctx context.Context, pod *corev1.Pod) (io.ReadCloser, error) {
 	opts := corev1.PodLogOptions{}
-	clientset, err := kubernetes.NewForConfig(c.restConfig)
-	if err != nil {
-		return nil, err
-	}
-	req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &opts)
+	req := c.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &opts)
 	return req.Stream(ctx)
 }
 
@@ -234,46 +384,6 @@ func (c *Client) MustGetDeployment(ctx context.Context, namespace, name string) 
 	deployment := &appsv1.Deployment{}
 	c.mustGet(ctx, deployment, namespace, name)
 	return deployment
-}
-
-func getDeploymentReplicas(deployment *appsv1.Deployment) int32 {
-	if deployment.Spec.Replicas != nil {
-		return *deployment.Spec.Replicas
-	}
-	return 1
-}
-
-func IsDeploymentScheduled(deployment *appsv1.Deployment) bool {
-	replicas := getDeploymentReplicas(deployment)
-	return deployment.Status.Replicas >= replicas
-}
-
-func IsDeploymentReady(deployment *appsv1.Deployment) bool {
-	replicas := getDeploymentReplicas(deployment)
-	return deployment.Status.ReadyReplicas == replicas
-}
-
-func IsDeploymentUpdated(deployment *appsv1.Deployment) bool {
-	replicas := getDeploymentReplicas(deployment)
-	return deployment.Status.UpdatedReplicas == replicas
-}
-
-func (c *Client) WaitUntilDeploymentScheduled(ctx context.Context, deployment *appsv1.Deployment) error {
-	return c.waitUntil(ctx, deployment, func() bool {
-		return IsDeploymentScheduled(deployment)
-	})
-}
-
-func (c *Client) WaitUntilDeploymentReady(ctx context.Context, deployment *appsv1.Deployment) error {
-	return c.waitUntil(ctx, deployment, func() bool {
-		return IsDeploymentReady(deployment)
-	})
-}
-
-func (c *Client) WaitUntilDeploymentUpdated(ctx context.Context, deployment *appsv1.Deployment) error {
-	return c.waitUntil(ctx, deployment, func() bool {
-		return IsDeploymentUpdated(deployment)
-	})
 }
 
 func (c *Client) MustGetReplicaSet(ctx context.Context, namespace, name string) *appsv1.ReplicaSet {
@@ -307,35 +417,6 @@ func (c *Client) GetReplicaSetsForDeployment(ctx context.Context, deployment *ap
 	return c.GetReplicaSetsForOwner(ctx, deployment)
 }
 
-func getReplicaSetReplicas(rs *appsv1.ReplicaSet) int32 {
-	if rs.Spec.Replicas != nil {
-		return *rs.Spec.Replicas
-	}
-	return 1
-}
-
-func IsReplicaSetAvailable(rs *appsv1.ReplicaSet) bool {
-	replicas := getReplicaSetReplicas(rs)
-	return rs.Status.AvailableReplicas == replicas
-}
-
-func IsReplicaSetReady(rs *appsv1.ReplicaSet) bool {
-	replicas := getReplicaSetReplicas(rs)
-	return rs.Status.ReadyReplicas == replicas
-}
-
-func (c *Client) WaitUntilReplicaSetAvailable(ctx context.Context, rs *appsv1.ReplicaSet) error {
-	return c.waitUntil(ctx, rs, func() bool {
-		return IsReplicaSetAvailable(rs)
-	})
-}
-
-func (c *Client) WaitUntilReplicaSetReady(ctx context.Context, rs *appsv1.ReplicaSet) error {
-	return c.waitUntil(ctx, rs, func() bool {
-		return IsReplicaSetReady(rs)
-	})
-}
-
 func (c *Client) MustGetJob(ctx context.Context, namespace, name string) *batchv1.Job {
 	job := &batchv1.Job{}
 	c.mustGet(ctx, job, namespace, name)
@@ -367,36 +448,10 @@ func (c *Client) GetJobsForCronJob(ctx context.Context, cronJob *batchv1beta1.Cr
 	return c.GetJobsForOwner(ctx, cronJob) // could also fetch using status
 }
 
-func IsJobActive(job *batchv1.Job) bool {
-	return job.Status.Active > 0
-}
-
-func (c *Client) WaitUntilJobActive(ctx context.Context, job *batchv1.Job) error {
-	return c.waitUntil(ctx, job, func() bool {
-		return IsJobActive(job)
-	})
-}
-
 func (c *Client) MustGetCronJob(ctx context.Context, namespace, name string) *batchv1beta1.CronJob {
 	cronJob := &batchv1beta1.CronJob{}
 	c.mustGet(ctx, cronJob, namespace, name)
 	return cronJob
-}
-
-func IsCronJobActive(cronJob *batchv1beta1.CronJob) bool {
-	if cronJob.Status.Active == nil {
-		return false
-	}
-	if len(cronJob.Status.Active) > 0 {
-		return true
-	}
-	return false
-}
-
-func (c *Client) WaitUntilCronJobActive(ctx context.Context, cronJob *batchv1beta1.CronJob) error {
-	return c.waitUntil(ctx, cronJob, func() bool {
-		return IsCronJobActive(cronJob)
-	})
 }
 
 func (c *Client) filterEvents(in []corev1.Event, obj runtime.Object) ([]corev1.Event, error) {
@@ -420,16 +475,12 @@ func (c *Client) filterEvents(in []corev1.Event, obj runtime.Object) ([]corev1.E
 }
 
 func (c *Client) GetEvents(ctx context.Context, obj runtime.Object) ([]corev1.Event, error) {
-	clientset, err := kubernetes.NewForConfig(c.restConfig)
-	if err != nil {
-		return nil, err
-	}
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		return nil, err
 	}
 	listOptions := metav1.ListOptions{}
-	list, err := clientset.CoreV1().Events(accessor.GetNamespace()).List(ctx, listOptions)
+	list, err := c.CoreV1().Events(accessor.GetNamespace()).List(ctx, listOptions)
 	if err != nil {
 		return nil, err
 	}

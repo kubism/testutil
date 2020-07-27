@@ -132,44 +132,76 @@ var _ = Describe("MustGetDeployment", func() {
 	})
 })
 
-var _ = Describe("WaitUntilDeploymentReady", func() {
-	It("waits until ready", func() {
+var _ = Describe("WaitUntil", func() {
+	It("waits until deployment ready", func() {
 		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
-		Expect(k8sClient.WaitUntilDeploymentReady(ctx, deployment)).To(Succeed())
+		Expect(k8sClient.WaitUntil(ctx, DeploymentIsReady(deployment))).To(Succeed())
 		Expect(IsDeploymentReady(deployment)).To(Equal(true))
 	})
 	It("fails for non-existing deployment", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		Expect(k8sClient.WaitUntilDeploymentReady(ctx, &appsv1.Deployment{})).NotTo(Succeed())
+		Expect(k8sClient.WaitUntil(ctx, DeploymentIsReady(&appsv1.Deployment{}))).NotTo(Succeed())
 	})
-})
-
-var _ = Describe("WaitUntilDeploymentScheduled", func() {
-	It("waits until scheduled", func() {
+	It("waits until deployment scheduled", func() {
 		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
-		Expect(k8sClient.WaitUntilDeploymentScheduled(ctx, deployment)).To(Succeed())
+		Expect(k8sClient.WaitUntil(ctx, DeploymentIsScheduled(deployment))).To(Succeed())
 		Expect(IsDeploymentScheduled(deployment)).To(Equal(true))
 	})
-})
-
-var _ = Describe("WaitUntilDeploymentUpdated", func() {
-	It("waits until updated", func() {
+	It("waits until deployment updated", func() {
 		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
-		Expect(k8sClient.WaitUntilDeploymentUpdated(ctx, deployment)).To(Succeed())
+		Expect(k8sClient.WaitUntil(ctx, DeploymentIsUpdated(deployment))).To(Succeed())
 		Expect(IsDeploymentUpdated(deployment)).To(Equal(true))
+	})
+	It("waits until replicaset available and ready", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		deployment := k8sClient.MustGetDeployment(ctx, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+		replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(replicaSets)).To(BeNumerically(">", 0))
+		rs := &replicaSets[0]
+		Expect(k8sClient.WaitUntil(ctx, ReplicaSetIsAvailable(rs), ReplicaSetIsReady(rs))).To(Succeed())
+		Expect(IsReplicaSetAvailable(rs)).To(Equal(true))
+		Expect(IsReplicaSetReady(rs)).To(Equal(true))
+	})
+	It("waits until job is active", func() {
+		job := mustCreatePiJob()
+		defer func() {
+			_ = k8sClient.Delete(context.Background(), job)
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		Expect(k8sClient.WaitUntil(ctx, JobIsActive(job))).To(Succeed())
+		Expect(IsJobActive(job)).To(Equal(true))
+		pods, err := k8sClient.GetPodsForJob(ctx, job)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(pods)).To(Equal(1))
+	})
+	It("waits until job is active", func() {
+		cronJob := mustCreatePiCronJob()
+		defer func() {
+			_ = k8sClient.Delete(context.Background(), cronJob)
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		Expect(k8sClient.WaitUntil(ctx, CronJobIsActive(cronJob))).To(Succeed())
+		Expect(IsCronJobActive(cronJob)).To(Equal(true))
+		jobs, err := k8sClient.GetJobsForCronJob(ctx, cronJob)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(jobs)).To(Equal(1))
 	})
 })
 
@@ -191,22 +223,6 @@ var _ = Describe("MustGetReplicaSet", func() {
 	})
 })
 
-var _ = Describe("WaitUntilReplicaSet*", func() {
-	It("waits until available and ready", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		deployment := k8sClient.MustGetDeployment(ctx, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
-		replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(replicaSets)).To(BeNumerically(">", 0))
-		rs := &replicaSets[0]
-		Expect(k8sClient.WaitUntilReplicaSetAvailable(ctx, rs)).To(Succeed())
-		Expect(IsReplicaSetAvailable(rs)).To(Equal(true))
-		Expect(k8sClient.WaitUntilReplicaSetReady(ctx, rs)).To(Succeed())
-		Expect(IsReplicaSetReady(rs)).To(Equal(true))
-	})
-})
-
 var _ = Describe("MustGetJob", func() {
 	It("works for existing job", func() {
 		Expect(func() {
@@ -224,22 +240,6 @@ var _ = Describe("MustGetJob", func() {
 	})
 })
 
-var _ = Describe("WaitUntilJobActive", func() {
-	It("waits until pod is active", func() {
-		job := mustCreatePiJob()
-		defer func() {
-			_ = k8sClient.Delete(context.Background(), job)
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		Expect(k8sClient.WaitUntilJobActive(ctx, job)).To(Succeed())
-		Expect(IsJobActive(job)).To(Equal(true))
-		pods, err := k8sClient.GetPodsForJob(ctx, job)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(pods)).To(Equal(1))
-	})
-})
-
 var _ = Describe("MustGetCronJob", func() {
 	It("works for existing cronjob", func() {
 		Expect(func() {
@@ -254,22 +254,6 @@ var _ = Describe("MustGetCronJob", func() {
 		Expect(func() {
 			_ = k8sClient.MustGetCronJob(context.Background(), "default", "thiscantexist")
 		}).Should(Panic())
-	})
-})
-
-var _ = Describe("WaitUntilCronJobActive", func() {
-	It("waits until job is active", func() {
-		cronJob := mustCreatePiCronJob()
-		defer func() {
-			_ = k8sClient.Delete(context.Background(), cronJob)
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		Expect(k8sClient.WaitUntilCronJobActive(ctx, cronJob)).To(Succeed())
-		Expect(IsCronJobActive(cronJob)).To(Equal(true))
-		jobs, err := k8sClient.GetJobsForCronJob(ctx, cronJob)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(jobs)).To(Equal(1))
 	})
 })
 
