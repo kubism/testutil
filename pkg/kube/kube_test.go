@@ -189,6 +189,22 @@ var _ = Describe("WaitUntilJobActive", func() {
 	})
 })
 
+var _ = Describe("WaitUntilCronJobActive", func() {
+	It("waits until job is active", func() {
+		cronJob := mustCreatePiCronJob()
+		defer func() {
+			_ = k8sClient.Delete(context.Background(), cronJob)
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		Expect(k8sClient.WaitUntilCronJobActive(ctx, cronJob)).To(Succeed())
+		Expect(IsCronJobActive(cronJob)).To(Equal(true))
+		jobs, err := k8sClient.GetJobsForCronJob(ctx, cronJob)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(jobs)).To(Equal(1))
+	})
+})
+
 var _ = Describe("GetEvents", func() {
 	It("can get events for existing pod", func() {
 		pod := mustGetReadyNginxPod(nginxRelease)

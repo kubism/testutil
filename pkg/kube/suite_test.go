@@ -29,6 +29,7 @@ import (
 	"github.com/kubism/testutil/pkg/rand"
 
 	batchv1 "k8s.io/api/batch/v1"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -174,4 +175,26 @@ func mustCreatePiJob() *batchv1.Job {
 	job := genPiJob()
 	Expect(k8sClient.Create(context.Background(), job)).To(Succeed())
 	return job
+}
+
+func genPiCronJob() *batchv1beta1.CronJob {
+	job := genPiJob()
+	return &batchv1beta1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "pi-cron-" + rand.String(5),
+		},
+		Spec: batchv1beta1.CronJobSpec{
+			Schedule: "* * * * *",
+			JobTemplate: batchv1beta1.JobTemplateSpec{
+				Spec: job.Spec,
+			},
+		},
+	}
+}
+
+func mustCreatePiCronJob() *batchv1beta1.CronJob {
+	cronJob := genPiCronJob()
+	Expect(k8sClient.Create(context.Background(), cronJob)).To(Succeed())
+	return cronJob
 }

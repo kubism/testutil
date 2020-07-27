@@ -30,6 +30,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -175,12 +176,9 @@ func reducePodsByOwner(pods []corev1.Pod, ownerUID types.UID) []corev1.Pod {
 }
 
 func (c *Client) GetPodsForOwner(ctx context.Context, owner runtime.Object) ([]corev1.Pod, error) {
-	accessor, err := meta.Accessor(owner)
+	accessor, err := getValidAccessor(owner)
 	if err != nil {
 		return nil, err
-	}
-	if accessor.GetUID() == "" {
-		return nil, fmt.Errorf("Owner UID can not be empty")
 	}
 	pods := &corev1.PodList{}
 	err = c.List(ctx, pods, client.InNamespace(accessor.GetNamespace()))
@@ -288,6 +286,35 @@ func (c *Client) MustGetJob(ctx context.Context, namespace, name string) *batchv
 	return job
 }
 
+func reduceJobsByOwner(jobs []batchv1.Job, ownerUID types.UID) []batchv1.Job {
+	matches := []batchv1.Job{}
+	for _, pod := range jobs {
+		for _, ref := range pod.OwnerReferences {
+			if ref.UID == ownerUID {
+				matches = append(matches, pod)
+			}
+		}
+	}
+	return matches
+}
+
+func (c *Client) GetJobsForOwner(ctx context.Context, owner runtime.Object) ([]batchv1.Job, error) {
+	accessor, err := getValidAccessor(owner)
+	if err != nil {
+		return nil, err
+	}
+	jobs := &batchv1.JobList{}
+	err = c.List(ctx, jobs, client.InNamespace(accessor.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	return reduceJobsByOwner(jobs.Items, accessor.GetUID()), nil
+}
+
+func (c *Client) GetJobsForCronJob(ctx context.Context, cronJob *batchv1beta1.CronJob) ([]batchv1.Job, error) {
+	return c.GetJobsForOwner(ctx, cronJob) // could also fetch using status
+}
+
 func IsJobActive(job *batchv1.Job) bool {
 	return job.Status.Active > 0
 }
@@ -295,6 +322,28 @@ func IsJobActive(job *batchv1.Job) bool {
 func (c *Client) WaitUntilJobActive(ctx context.Context, job *batchv1.Job) error {
 	return c.waitUntil(ctx, job, func() bool {
 		return IsJobActive(job)
+	})
+}
+
+func (c *Client) MustGetCronJob(ctx context.Context, namespace, name string) *batchv1beta1.CronJob {
+	cronJob := &batchv1beta1.CronJob{}
+	c.mustGet(ctx, cronJob, namespace, name)
+	return cronJob
+}
+
+func IsCronJobActive(cronJob *batchv1beta1.CronJob) bool {
+	if cronJob.Status.Active == nil {
+		return false
+	}
+	if len(cronJob.Status.Active) > 0 {
+		return true
+	}
+	return false
+}
+
+func (c *Client) WaitUntilCronJobActive(ctx context.Context, cronJob *batchv1beta1.CronJob) error {
+	return c.waitUntil(ctx, cronJob, func() bool {
+		return IsCronJobActive(cronJob)
 	})
 }
 
@@ -357,4 +406,15 @@ func (c *Client) waitUntil(ctx context.Context, obj runtime.Object, check func()
 		}
 	}
 	return nil
+}
+
+func getValidAccessor(obj runtime.Object) (metav1.Object, error) {
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		return nil, err
+	}
+	if accessor.GetUID() == "" {
+		return nil, fmt.Errorf("Owner UID can not be empty")
+	}
+	return accessor, nil
 }

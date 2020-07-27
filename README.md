@@ -21,12 +21,10 @@ TODO: write introduction
 * kube.GetEvents
 * kube.GetPodLogs
 * kube.PortForward
+* Jobs, CronJobs, ReplicaSets, (TODO: StatefulSets, DaemonSets)
 
 ## Notes (temporary)
 
 * uses panic do not use in live code just tests
 * `make TEST_FLAGS="-kind-cluster=testutil" test`
 
-## TODO
-
-* implement statefulset, daemonset, cronjob, job helper
