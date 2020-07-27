@@ -176,16 +176,12 @@ func reducePodsByOwner(pods []corev1.Pod, ownerUID types.UID) []corev1.Pod {
 }
 
 func (c *Client) GetPodsForOwner(ctx context.Context, owner runtime.Object) ([]corev1.Pod, error) {
-	accessor, err := getValidAccessor(owner)
-	if err != nil {
-		return nil, err
-	}
 	pods := &corev1.PodList{}
-	err = c.List(ctx, pods, client.InNamespace(accessor.GetNamespace()))
+	ownerUID, err := c.getObjectsForOwner(ctx, pods, owner)
 	if err != nil {
 		return nil, err
 	}
-	return reducePodsByOwner(pods.Items, accessor.GetUID()), nil
+	return reducePodsByOwner(pods.Items, ownerUID), nil
 }
 
 func (c *Client) GetPodsForJob(ctx context.Context, job *batchv1.Job) ([]corev1.Pod, error) {
@@ -280,6 +276,66 @@ func (c *Client) WaitUntilDeploymentUpdated(ctx context.Context, deployment *app
 	})
 }
 
+func (c *Client) MustGetReplicaSet(ctx context.Context, namespace, name string) *appsv1.ReplicaSet {
+	rs := &appsv1.ReplicaSet{}
+	c.mustGet(ctx, rs, namespace, name)
+	return rs
+}
+
+func reduceReplicaSetsByOwner(replicaSets []appsv1.ReplicaSet, ownerUID types.UID) []appsv1.ReplicaSet {
+	matches := []appsv1.ReplicaSet{}
+	for _, pod := range replicaSets {
+		for _, ref := range pod.OwnerReferences {
+			if ref.UID == ownerUID {
+				matches = append(matches, pod)
+			}
+		}
+	}
+	return matches
+}
+
+func (c *Client) GetReplicaSetsForOwner(ctx context.Context, owner runtime.Object) ([]appsv1.ReplicaSet, error) {
+	replicaSets := &appsv1.ReplicaSetList{}
+	ownerUID, err := c.getObjectsForOwner(ctx, replicaSets, owner)
+	if err != nil {
+		return nil, err
+	}
+	return reduceReplicaSetsByOwner(replicaSets.Items, ownerUID), nil
+}
+
+func (c *Client) GetReplicaSetsForDeployment(ctx context.Context, deployment *appsv1.Deployment) ([]appsv1.ReplicaSet, error) {
+	return c.GetReplicaSetsForOwner(ctx, deployment)
+}
+
+func getReplicaSetReplicas(rs *appsv1.ReplicaSet) int32 {
+	if rs.Spec.Replicas != nil {
+		return *rs.Spec.Replicas
+	}
+	return 1
+}
+
+func IsReplicaSetAvailable(rs *appsv1.ReplicaSet) bool {
+	replicas := getReplicaSetReplicas(rs)
+	return rs.Status.AvailableReplicas == replicas
+}
+
+func IsReplicaSetReady(rs *appsv1.ReplicaSet) bool {
+	replicas := getReplicaSetReplicas(rs)
+	return rs.Status.ReadyReplicas == replicas
+}
+
+func (c *Client) WaitUntilReplicaSetAvailable(ctx context.Context, rs *appsv1.ReplicaSet) error {
+	return c.waitUntil(ctx, rs, func() bool {
+		return IsReplicaSetAvailable(rs)
+	})
+}
+
+func (c *Client) WaitUntilReplicaSetReady(ctx context.Context, rs *appsv1.ReplicaSet) error {
+	return c.waitUntil(ctx, rs, func() bool {
+		return IsReplicaSetReady(rs)
+	})
+}
+
 func (c *Client) MustGetJob(ctx context.Context, namespace, name string) *batchv1.Job {
 	job := &batchv1.Job{}
 	c.mustGet(ctx, job, namespace, name)
@@ -299,16 +355,12 @@ func reduceJobsByOwner(jobs []batchv1.Job, ownerUID types.UID) []batchv1.Job {
 }
 
 func (c *Client) GetJobsForOwner(ctx context.Context, owner runtime.Object) ([]batchv1.Job, error) {
-	accessor, err := getValidAccessor(owner)
-	if err != nil {
-		return nil, err
-	}
 	jobs := &batchv1.JobList{}
-	err = c.List(ctx, jobs, client.InNamespace(accessor.GetNamespace()))
+	ownerUID, err := c.getObjectsForOwner(ctx, jobs, owner)
 	if err != nil {
 		return nil, err
 	}
-	return reduceJobsByOwner(jobs.Items, accessor.GetUID()), nil
+	return reduceJobsByOwner(jobs.Items, ownerUID), nil
 }
 
 func (c *Client) GetJobsForCronJob(ctx context.Context, cronJob *batchv1beta1.CronJob) ([]batchv1.Job, error) {
@@ -392,6 +444,18 @@ func (c *Client) mustGet(ctx context.Context, obj runtime.Object, namespace, nam
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (c *Client) getObjectsForOwner(ctx context.Context, list runtime.Object, owner runtime.Object) (types.UID, error) {
+	accessor, err := getValidAccessor(owner)
+	if err != nil {
+		return "", err
+	}
+	err = c.List(ctx, list, client.InNamespace(accessor.GetNamespace()))
+	if err != nil {
+		return "", err
+	}
+	return accessor.GetUID(), nil
 }
 
 func (c *Client) waitUntil(ctx context.Context, obj runtime.Object, check func() bool) error {

@@ -173,6 +173,40 @@ var _ = Describe("WaitUntilDeploymentUpdated", func() {
 	})
 })
 
+var _ = Describe("MustGetReplicaSet", func() {
+	It("works for existing replicaset", func() {
+		Expect(func() {
+			deployment := k8sClient.MustGetDeployment(context.Background(), nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+			replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(replicaSets)).To(BeNumerically(">", 0))
+			rs := &replicaSets[0]
+			_ = k8sClient.MustGetReplicaSet(context.Background(), rs.Namespace, rs.Name)
+		}).ShouldNot(Panic())
+	})
+	It("panics if replicaset does not exist", func() {
+		Expect(func() {
+			_ = k8sClient.MustGetReplicaSet(context.Background(), nginxRelease.Namespace, nginxRelease.Name+"-thiscantexist")
+		}).Should(Panic())
+	})
+})
+
+var _ = Describe("WaitUntilReplicaSet*", func() {
+	It("waits until available and ready", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		deployment := k8sClient.MustGetDeployment(ctx, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+		replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(replicaSets)).To(BeNumerically(">", 0))
+		rs := &replicaSets[0]
+		Expect(k8sClient.WaitUntilReplicaSetAvailable(ctx, rs)).To(Succeed())
+		Expect(IsReplicaSetAvailable(rs)).To(Equal(true))
+		Expect(k8sClient.WaitUntilReplicaSetReady(ctx, rs)).To(Succeed())
+		Expect(IsReplicaSetReady(rs)).To(Equal(true))
+	})
+})
+
 var _ = Describe("MustGetJob", func() {
 	It("works for existing job", func() {
 		Expect(func() {
