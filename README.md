@@ -29,4 +29,4 @@ TODO: write introduction
 
 ## TODO
 
-* implement statefulset, daemonset helper
+* implement statefulset, daemonset, cronjob, job helper

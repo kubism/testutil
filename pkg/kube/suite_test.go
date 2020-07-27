@@ -42,7 +42,7 @@ const (
 var (
 	cluster      *kind.Cluster
 	helmClient   *helm.Client
-	k8sClient    client.Client
+	k8sClient    *Client
 	restConfig   *rest.Config
 	nginxRelease *helm.Release
 )
@@ -67,6 +67,9 @@ var _ = BeforeSuite(func(done Done) {
 	}
 	cluster, err = kind.NewCluster(clusterOptions...)
 	Expect(err).To(Succeed())
+	restConfig, err = cluster.GetRESTConfig()
+	Expect(err).To(Succeed())
+	Expect(restConfig).ToNot(BeNil())
 	By("setup helm client")
 	kubeConfig, err := cluster.GetKubeConfig()
 	Expect(err).To(Succeed())
@@ -78,12 +81,9 @@ var _ = BeforeSuite(func(done Done) {
 		URL:  "https://charts.bitnami.com/bitnami",
 	})).To(Succeed())
 	By("setup k8s client")
-	k8sClient, err = cluster.GetClient()
+	k8sClient, err = NewClient(restConfig)
 	Expect(err).To(Succeed())
 	Expect(k8sClient).ToNot(BeNil())
-	restConfig, err = cluster.GetRESTConfig()
-	Expect(err).To(Succeed())
-	Expect(restConfig).ToNot(BeNil())
 	By("setup prepared nginx release")
 	nginxRelease = mustInstallNginx()
 	close(done)
@@ -114,17 +114,19 @@ func mustInstallNginx() *helm.Release {
 }
 
 func mustGetReadyNginxPod(rls *helm.Release) *corev1.Pod {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	pods := &corev1.PodList{}
-	deployment := MustGetDeployment(restConfig, rls.Namespace, rls.Name+"-nginx")
+	deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
 	By(fmt.Sprintf("waiting until deployment %s-nginx is scheduled", rls.Name))
-	Expect(WaitUntilDeploymentScheduled(restConfig, deployment, timeout)).To(Succeed())
+	Expect(k8sClient.WaitUntilDeploymentScheduled(ctx, deployment)).To(Succeed())
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
 		client.MatchingLabels{"app.kubernetes.io/instance": rls.Name})).To(Succeed())
 	Expect(len(pods.Items)).To(BeNumerically(">", 0))
 	pod := pods.Items[0]
 	By("waiting until pod is ready")
-	Expect(WaitUntilPodReady(restConfig, &pod, timeout)).To(Succeed())
+
+	Expect(k8sClient.WaitUntilPodReady(ctx, &pod)).To(Succeed())
 	return &pod
 }
 
