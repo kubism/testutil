@@ -61,7 +61,7 @@ var _ = Describe("PortForward", func() {
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		pod := mustGetReadyNginxPod(rls)
 		Expect(func() {
-			_ = k8sClient.MustGetPod(context.Background(), pod.Namespace, pod.Name)
+			Expect(k8sClient.Get(context.Background(), NamespacedName(pod), pod)).To(Succeed())
 		}).ShouldNot(Panic())
 		By("creating port-forward")
 		pf, err := k8sClient.PortForward(pod, PortAny, 8080)
@@ -119,26 +119,14 @@ var _ = Describe("GetPodLogs", func() {
 	})
 })
 
-var _ = Describe("MustGetDeployment", func() {
-	It("works for existing deployment", func() {
-		Expect(func() {
-			_ = k8sClient.MustGetDeployment(context.Background(), nginxRelease.Namespace, nginxRelease.Name+"-nginx")
-		}).ShouldNot(Panic())
-	})
-	It("panics if deployment does not exist", func() {
-		Expect(func() {
-			_ = k8sClient.MustGetDeployment(context.Background(), nginxRelease.Namespace, nginxRelease.Name+"-thiscantexist")
-		}).Should(Panic())
-	})
-})
-
 var _ = Describe("WaitUntil", func() {
 	It("waits until deployment ready", func() {
 		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
+		deployment := DeploymentWithNamespacedName(rls.Namespace, rls.Name+"-nginx")
+		Expect(k8sClient.Get(ctx, NamespacedName(deployment), deployment)).To(Succeed())
 		Expect(k8sClient.WaitUntil(ctx, DeploymentIsReady(deployment))).To(Succeed())
 		Expect(IsDeploymentReady(deployment)).To(Equal(true))
 	})
@@ -152,7 +140,8 @@ var _ = Describe("WaitUntil", func() {
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
+		deployment := DeploymentWithNamespacedName(rls.Namespace, rls.Name+"-nginx")
+		Expect(k8sClient.Get(ctx, NamespacedName(deployment), deployment)).To(Succeed())
 		Expect(k8sClient.WaitUntil(ctx, DeploymentIsScheduled(deployment))).To(Succeed())
 		Expect(IsDeploymentScheduled(deployment)).To(Equal(true))
 	})
@@ -161,14 +150,16 @@ var _ = Describe("WaitUntil", func() {
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
+		deployment := DeploymentWithNamespacedName(rls.Namespace, rls.Name+"-nginx")
+		Expect(k8sClient.Get(ctx, NamespacedName(deployment), deployment)).To(Succeed())
 		Expect(k8sClient.WaitUntil(ctx, DeploymentIsUpdated(deployment))).To(Succeed())
 		Expect(IsDeploymentUpdated(deployment)).To(Equal(true))
 	})
 	It("waits until replicaset available and ready", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		deployment := k8sClient.MustGetDeployment(ctx, nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+		deployment := DeploymentWithNamespacedName(nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+		Expect(k8sClient.Get(ctx, NamespacedName(deployment), deployment)).To(Succeed())
 		replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(replicaSets)).To(BeNumerically(">", 0))
@@ -205,63 +196,57 @@ var _ = Describe("WaitUntil", func() {
 	})
 })
 
-var _ = Describe("MustGetReplicaSet", func() {
-	It("works for existing replicaset", func() {
-		Expect(func() {
-			deployment := k8sClient.MustGetDeployment(context.Background(), nginxRelease.Namespace, nginxRelease.Name+"-nginx")
-			replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(len(replicaSets)).To(BeNumerically(">", 0))
-			rs := &replicaSets[0]
-			_ = k8sClient.MustGetReplicaSet(context.Background(), rs.Namespace, rs.Name)
-		}).ShouldNot(Panic())
-	})
-	It("panics if replicaset does not exist", func() {
-		Expect(func() {
-			_ = k8sClient.MustGetReplicaSet(context.Background(), nginxRelease.Namespace, nginxRelease.Name+"-thiscantexist")
-		}).Should(Panic())
-	})
-})
-
-var _ = Describe("MustGetJob", func() {
-	It("works for existing job", func() {
-		Expect(func() {
-			job := mustCreatePiJob()
-			defer func() {
-				_ = k8sClient.Delete(context.Background(), job)
-			}()
-			_ = k8sClient.MustGetJob(context.Background(), job.Namespace, job.Name)
-		}).ShouldNot(Panic())
-	})
-	It("panics if job does not exist", func() {
-		Expect(func() {
-			_ = k8sClient.MustGetJob(context.Background(), "default", "thiscantexist")
-		}).Should(Panic())
-	})
-})
-
-var _ = Describe("MustGetCronJob", func() {
-	It("works for existing cronjob", func() {
-		Expect(func() {
-			cronJob := mustCreatePiCronJob()
-			defer func() {
-				_ = k8sClient.Delete(context.Background(), cronJob)
-			}()
-			_ = k8sClient.MustGetCronJob(context.Background(), cronJob.Namespace, cronJob.Name)
-		}).ShouldNot(Panic())
-	})
-	It("panics if cronjob does not exist", func() {
-		Expect(func() {
-			_ = k8sClient.MustGetCronJob(context.Background(), "default", "thiscantexist")
-		}).Should(Panic())
-	})
-})
-
 var _ = Describe("GetEvents", func() {
 	It("can get events for existing pod", func() {
 		pod := mustGetReadyNginxPod(nginxRelease)
 		events, err := k8sClient.GetEvents(context.Background(), pod)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(events)).To(BeNumerically(">", 0))
+	})
+})
+
+var _ = Describe("NamespacedName", func() {
+	It("can retrieve namespace and name", func() {
+		Expect(func() {
+			pod := PodWithNamespacedName("a", "b")
+			namespacedName := NamespacedName(pod)
+			Expect(namespacedName.Namespace).To(Equal(pod.Namespace))
+			Expect(namespacedName.Name).To(Equal(pod.Name))
+		}).ShouldNot(Panic())
+	})
+	It("fails for invalid types", func() {
+		Expect(func() {
+			_ = NamespacedName(nil)
+		}).Should(Panic())
+	})
+	It("works for existing replicaset", func() {
+		Expect(func() {
+			deployment := DeploymentWithNamespacedName(nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+			Expect(k8sClient.Get(context.Background(), NamespacedName(deployment), deployment)).To(Succeed())
+			replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(replicaSets)).To(BeNumerically(">", 0))
+			rs := &replicaSets[0]
+			tmp := ReplicaSetWithNamespacedName(rs.Namespace, rs.Name)
+			Expect(k8sClient.Get(context.Background(), NamespacedName(tmp), tmp)).To(Succeed())
+		}).ShouldNot(Panic())
+	})
+	It("works for existing job", func() {
+		Expect(func() {
+			job := mustCreatePiJob()
+			defer func() {
+				_ = k8sClient.Delete(context.Background(), job)
+			}()
+			Expect(k8sClient.Get(context.Background(), NamespacedName(job), job)).To(Succeed())
+		}).ShouldNot(Panic())
+	})
+	It("works for existing cronjob", func() {
+		Expect(func() {
+			cronJob := mustCreatePiCronJob()
+			defer func() {
+				_ = k8sClient.Delete(context.Background(), cronJob)
+			}()
+			Expect(k8sClient.Get(context.Background(), NamespacedName(cronJob), cronJob)).To(Succeed())
+		}).ShouldNot(Panic())
 	})
 })

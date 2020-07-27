@@ -185,8 +185,15 @@ func (pf *PortForward) Close() error {
 
 func (c *Client) WaitUntil(ctx context.Context, conditions ...Condition) error {
 	for _, condition := range conditions {
-		if err := c.waitUntil(ctx, condition.subject(), condition.check); err != nil {
+		objectKey, err := client.ObjectKeyFromObject(condition.subject())
+		if err != nil {
 			return err
+		}
+		for !condition.check() {
+			err := c.Get(ctx, objectKey, condition.subject())
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -329,12 +336,6 @@ func CronJobIsActive(cronJob *batchv1beta1.CronJob) Condition {
 	}
 }
 
-func (c *Client) MustGetPod(ctx context.Context, namespace, name string) *corev1.Pod {
-	pod := &corev1.Pod{}
-	c.mustGet(ctx, pod, namespace, name)
-	return pod
-}
-
 func reducePodsByOwner(pods []corev1.Pod, ownerUID types.UID) []corev1.Pod {
 	matches := []corev1.Pod{}
 	for _, pod := range pods {
@@ -380,18 +381,6 @@ func (c *Client) GetPodLogsString(ctx context.Context, pod *corev1.Pod) (string,
 	return buf.String(), nil
 }
 
-func (c *Client) MustGetDeployment(ctx context.Context, namespace, name string) *appsv1.Deployment {
-	deployment := &appsv1.Deployment{}
-	c.mustGet(ctx, deployment, namespace, name)
-	return deployment
-}
-
-func (c *Client) MustGetReplicaSet(ctx context.Context, namespace, name string) *appsv1.ReplicaSet {
-	rs := &appsv1.ReplicaSet{}
-	c.mustGet(ctx, rs, namespace, name)
-	return rs
-}
-
 func reduceReplicaSetsByOwner(replicaSets []appsv1.ReplicaSet, ownerUID types.UID) []appsv1.ReplicaSet {
 	matches := []appsv1.ReplicaSet{}
 	for _, pod := range replicaSets {
@@ -417,12 +406,6 @@ func (c *Client) GetReplicaSetsForDeployment(ctx context.Context, deployment *ap
 	return c.GetReplicaSetsForOwner(ctx, deployment)
 }
 
-func (c *Client) MustGetJob(ctx context.Context, namespace, name string) *batchv1.Job {
-	job := &batchv1.Job{}
-	c.mustGet(ctx, job, namespace, name)
-	return job
-}
-
 func reduceJobsByOwner(jobs []batchv1.Job, ownerUID types.UID) []batchv1.Job {
 	matches := []batchv1.Job{}
 	for _, pod := range jobs {
@@ -446,12 +429,6 @@ func (c *Client) GetJobsForOwner(ctx context.Context, owner runtime.Object) ([]b
 
 func (c *Client) GetJobsForCronJob(ctx context.Context, cronJob *batchv1beta1.CronJob) ([]batchv1.Job, error) {
 	return c.GetJobsForOwner(ctx, cronJob) // could also fetch using status
-}
-
-func (c *Client) MustGetCronJob(ctx context.Context, namespace, name string) *batchv1beta1.CronJob {
-	cronJob := &batchv1beta1.CronJob{}
-	c.mustGet(ctx, cronJob, namespace, name)
-	return cronJob
 }
 
 func (c *Client) filterEvents(in []corev1.Event, obj runtime.Object) ([]corev1.Event, error) {
@@ -487,16 +464,6 @@ func (c *Client) GetEvents(ctx context.Context, obj runtime.Object) ([]corev1.Ev
 	return c.filterEvents(list.Items, obj)
 }
 
-func (c *Client) mustGet(ctx context.Context, obj runtime.Object, namespace, name string) {
-	err := c.Get(ctx, client.ObjectKey{
-		Namespace: namespace,
-		Name:      name,
-	}, obj)
-	if err != nil {
-		panic(err)
-	}
-}
-
 func (c *Client) getObjectsForOwner(ctx context.Context, list runtime.Object, owner runtime.Object) (types.UID, error) {
 	accessor, err := getValidAccessor(owner)
 	if err != nil {
@@ -509,20 +476,6 @@ func (c *Client) getObjectsForOwner(ctx context.Context, list runtime.Object, ow
 	return accessor.GetUID(), nil
 }
 
-func (c *Client) waitUntil(ctx context.Context, obj runtime.Object, check func() bool) error {
-	objectKey, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return err
-	}
-	for !check() {
-		err := c.Get(ctx, objectKey, obj)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func getValidAccessor(obj runtime.Object) (metav1.Object, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -532,4 +485,62 @@ func getValidAccessor(obj runtime.Object) (metav1.Object, error) {
 		return nil, fmt.Errorf("Owner UID can not be empty")
 	}
 	return accessor, nil
+}
+
+// NamespaceName conveniently creates a NamespacedName from any valid kubernetes
+// resource. If no valid object is provided, the function will panic.
+func NamespacedName(obj runtime.Object) types.NamespacedName {
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		panic(err)
+	}
+	return types.NamespacedName{
+		Namespace: accessor.GetNamespace(),
+		Name:      accessor.GetName(),
+	}
+}
+
+func PodWithNamespacedName(namespace, name string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+}
+
+func ReplicaSetWithNamespacedName(namespace, name string) *appsv1.ReplicaSet {
+	return &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+}
+
+func DeploymentWithNamespacedName(namespace, name string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+}
+
+func JobWithNamespacedName(namespace, name string) *batchv1.Job {
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+}
+
+func CronJobWithNamespacedName(namespace, name string) *batchv1beta1.CronJob {
+	return &batchv1beta1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
 }

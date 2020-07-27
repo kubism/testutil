@@ -121,7 +121,8 @@ func mustGetReadyNginxPod(rls *helm.Release) *corev1.Pod {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	pods := &corev1.PodList{}
-	deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
+	deployment := DeploymentWithNamespacedName(rls.Namespace, rls.Name+"-nginx")
+	Expect(k8sClient.Get(ctx, NamespacedName(deployment), deployment)).To(Succeed())
 	By(fmt.Sprintf("waiting until deployment %s-nginx is scheduled", rls.Name))
 	Expect(k8sClient.WaitUntil(ctx, DeploymentIsScheduled(deployment))).To(Succeed())
 	Expect(k8sClient.List(ctx, pods, client.InNamespace(rls.Namespace),
