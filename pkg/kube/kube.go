@@ -29,10 +29,12 @@ import (
 	"github.com/kubism/testutil/pkg/misc"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -156,14 +158,40 @@ func (pf *PortForward) Close() error {
 
 func (c *Client) MustGetPod(ctx context.Context, namespace, name string) *corev1.Pod {
 	pod := &corev1.Pod{}
-	err := c.Get(ctx, client.ObjectKey{
-		Namespace: namespace,
-		Name:      name,
-	}, pod)
-	if err != nil {
-		panic(err)
-	}
+	c.mustGet(ctx, pod, namespace, name)
 	return pod
+}
+
+func reducePodsByOwner(pods []corev1.Pod, ownerUID types.UID) []corev1.Pod {
+	matches := []corev1.Pod{}
+	for _, pod := range pods {
+		for _, ref := range pod.OwnerReferences {
+			if ref.UID == ownerUID {
+				matches = append(matches, pod)
+			}
+		}
+	}
+	return matches
+}
+
+func (c *Client) GetPodsForOwner(ctx context.Context, owner runtime.Object) ([]corev1.Pod, error) {
+	accessor, err := meta.Accessor(owner)
+	if err != nil {
+		return nil, err
+	}
+	if accessor.GetUID() == "" {
+		return nil, fmt.Errorf("Owner UID can not be empty")
+	}
+	pods := &corev1.PodList{}
+	err = c.List(ctx, pods, client.InNamespace(accessor.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	return reducePodsByOwner(pods.Items, accessor.GetUID()), nil
+}
+
+func (c *Client) GetPodsForJob(ctx context.Context, job *batchv1.Job) ([]corev1.Pod, error) {
+	return c.GetPodsForOwner(ctx, job)
 }
 
 func IsPodReady(pod *corev1.Pod) bool {
@@ -210,13 +238,7 @@ func (c *Client) GetPodLogsString(ctx context.Context, pod *corev1.Pod) (string,
 
 func (c *Client) MustGetDeployment(ctx context.Context, namespace, name string) *appsv1.Deployment {
 	deployment := &appsv1.Deployment{}
-	err := c.Get(ctx, client.ObjectKey{
-		Namespace: namespace,
-		Name:      name,
-	}, deployment)
-	if err != nil {
-		panic(err)
-	}
+	c.mustGet(ctx, deployment, namespace, name)
 	return deployment
 }
 
@@ -260,18 +282,20 @@ func (c *Client) WaitUntilDeploymentUpdated(ctx context.Context, deployment *app
 	})
 }
 
-func (c *Client) waitUntil(ctx context.Context, obj runtime.Object, check func() bool) error {
-	objectKey, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return err
-	}
-	for !check() {
-		err := c.Get(ctx, objectKey, obj)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+func (c *Client) MustGetJob(ctx context.Context, namespace, name string) *batchv1.Job {
+	job := &batchv1.Job{}
+	c.mustGet(ctx, job, namespace, name)
+	return job
+}
+
+func IsJobActive(job *batchv1.Job) bool {
+	return job.Status.Active > 0
+}
+
+func (c *Client) WaitUntilJobActive(ctx context.Context, job *batchv1.Job) error {
+	return c.waitUntil(ctx, job, func() bool {
+		return IsJobActive(job)
+	})
 }
 
 func (c *Client) filterEvents(in []corev1.Event, obj runtime.Object) ([]corev1.Event, error) {
@@ -309,4 +333,28 @@ func (c *Client) GetEvents(ctx context.Context, obj runtime.Object) ([]corev1.Ev
 		return nil, err
 	}
 	return c.filterEvents(list.Items, obj)
+}
+
+func (c *Client) mustGet(ctx context.Context, obj runtime.Object, namespace, name string) {
+	err := c.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, obj)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (c *Client) waitUntil(ctx context.Context, obj runtime.Object, check func() bool) error {
+	objectKey, err := client.ObjectKeyFromObject(obj)
+	if err != nil {
+		return err
+	}
+	for !check() {
+		err := c.Get(ctx, objectKey, obj)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

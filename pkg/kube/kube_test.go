@@ -87,6 +87,22 @@ var _ = Describe("PortForward", func() {
 	})
 })
 
+var _ = Describe("GetPodsByOwner", func() {
+	// for successful usage, see `WaitUntilJobActive`-tests
+	It("fails for non-existing object", func() {
+		job := genPiJob()
+		job.Namespace = "doesnotexist"
+		_, err := k8sClient.GetPodsForOwner(context.Background(), job)
+		Expect(err).To(HaveOccurred())
+	})
+	It("fails for malformed object", func() {
+		job := genPiJob()
+		job.Namespace = "+"
+		_, err := k8sClient.GetPodsForOwner(context.Background(), job)
+		Expect(err).To(HaveOccurred())
+	})
+})
+
 var _ = Describe("GetPodLogs", func() {
 	It("can get logs of existing pod", func() {
 		pod := mustGetReadyNginxPod(nginxRelease)
@@ -154,6 +170,22 @@ var _ = Describe("WaitUntilDeploymentUpdated", func() {
 		deployment := k8sClient.MustGetDeployment(ctx, rls.Namespace, rls.Name+"-nginx")
 		Expect(k8sClient.WaitUntilDeploymentUpdated(ctx, deployment)).To(Succeed())
 		Expect(IsDeploymentUpdated(deployment)).To(Equal(true))
+	})
+})
+
+var _ = Describe("WaitUntilJobActive", func() {
+	It("waits until pod is active", func() {
+		job := mustCreatePiJob()
+		defer func() {
+			_ = k8sClient.Delete(context.Background(), job)
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		Expect(k8sClient.WaitUntilJobActive(ctx, job)).To(Succeed())
+		Expect(IsJobActive(job)).To(Equal(true))
+		pods, err := k8sClient.GetPodsForJob(ctx, job)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(pods)).To(Equal(1))
 	})
 })
 

@@ -26,8 +26,11 @@ import (
 	"github.com/kubism/testutil/internal/flags"
 	"github.com/kubism/testutil/pkg/helm"
 	"github.com/kubism/testutil/pkg/kind"
+	"github.com/kubism/testutil/pkg/rand"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -140,4 +143,35 @@ func checkNginxServer(url string) error {
 		return fmt.Errorf("Expected 200 got %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func genPiJob() *batchv1.Job {
+	backoffLimit := int32(3)
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "pi-" + rand.String(5),
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit: &backoffLimit,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{
+						{
+							Name:    "pi",
+							Image:   "perl",
+							Command: []string{"perl", "-Mbignum=bpi", "-wle", "print bpi(2000)"},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func mustCreatePiJob() *batchv1.Job {
+	job := genPiJob()
+	Expect(k8sClient.Create(context.Background(), job)).To(Succeed())
+	return job
 }
