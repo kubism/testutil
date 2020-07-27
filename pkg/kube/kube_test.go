@@ -173,6 +173,23 @@ var _ = Describe("WaitUntilDeploymentUpdated", func() {
 	})
 })
 
+var _ = Describe("MustGetJob", func() {
+	It("works for existing job", func() {
+		Expect(func() {
+			job := mustCreatePiJob()
+			defer func() {
+				_ = k8sClient.Delete(context.Background(), job)
+			}()
+			_ = k8sClient.MustGetJob(context.Background(), job.Namespace, job.Name)
+		}).ShouldNot(Panic())
+	})
+	It("panics if job does not exist", func() {
+		Expect(func() {
+			_ = k8sClient.MustGetJob(context.Background(), "default", "thiscantexist")
+		}).Should(Panic())
+	})
+})
+
 var _ = Describe("WaitUntilJobActive", func() {
 	It("waits until pod is active", func() {
 		job := mustCreatePiJob()
@@ -186,6 +203,23 @@ var _ = Describe("WaitUntilJobActive", func() {
 		pods, err := k8sClient.GetPodsForJob(ctx, job)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(pods)).To(Equal(1))
+	})
+})
+
+var _ = Describe("MustGetCronJob", func() {
+	It("works for existing cronjob", func() {
+		Expect(func() {
+			cronJob := mustCreatePiCronJob()
+			defer func() {
+				_ = k8sClient.Delete(context.Background(), cronJob)
+			}()
+			_ = k8sClient.MustGetCronJob(context.Background(), cronJob.Namespace, cronJob.Name)
+		}).ShouldNot(Panic())
+	})
+	It("panics if cronjob does not exist", func() {
+		Expect(func() {
+			_ = k8sClient.MustGetCronJob(context.Background(), "default", "thiscantexist")
+		}).Should(Panic())
 	})
 })
 
