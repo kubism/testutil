@@ -19,9 +19,11 @@ package kube
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	. "github.com/onsi/ginkgo"
@@ -87,6 +89,31 @@ var _ = Describe("PortForward", func() {
 	})
 })
 
+var _ = Describe("Logs", func() {
+	It("can get logs of existing pod", func() {
+		pod := mustGetReadyNginxPod(nginxRelease)
+		logs, err := k8sClient.LogsString(context.Background(), pod)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(logs)).To(BeNumerically(">", 0))
+	})
+	It("fails if pod does not exist", func() {
+		var pod corev1.Pod
+		pod.Namespace = "default"
+		pod.Name = "doesnotexist"
+		_, err := k8sClient.LogsString(context.Background(), &pod)
+		Expect(err).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("Events", func() {
+	It("can get events for existing pod", func() {
+		pod := mustGetReadyNginxPod(nginxRelease)
+		events, err := k8sClient.Events(context.Background(), pod)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(events)).To(BeNumerically(">", 0))
+	})
+})
+
 var _ = Describe("GetPodsByOwner", func() {
 	// for successful usage, see `WaitUntilJobActive`-tests
 	It("fails for non-existing object", func() {
@@ -103,23 +130,29 @@ var _ = Describe("GetPodsByOwner", func() {
 	})
 })
 
-var _ = Describe("GetPodLogs", func() {
-	It("can get logs of existing pod", func() {
-		pod := mustGetReadyNginxPod(nginxRelease)
-		logs, err := k8sClient.LogsString(context.Background(), pod)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(logs)).To(BeNumerically(">", 0))
-	})
-	It("fails if pod does not exist", func() {
-		var pod corev1.Pod
-		pod.Namespace = "default"
-		pod.Name = "doesnotexist"
-		_, err := k8sClient.LogsString(context.Background(), &pod)
-		Expect(err).To(HaveOccurred())
-	})
-})
+type testCondition struct {
+	Object runtime.Object
+}
+
+func (c testCondition) subject() runtime.Object {
+	return c.Object
+}
+
+func (_ testCondition) check() bool {
+	return false
+}
 
 var _ = Describe("WaitUntil", func() {
+	It("fails for condition with nil subject", func() {
+		Expect(k8sClient.WaitUntil(context.Background(), testCondition{})).ToNot(Succeed())
+	})
+	It("can timeout if check does not become true", func() {
+		deployment := DeploymentWithNamespacedName(nginxRelease.Namespace, nginxRelease.Name+"-nginx")
+		Expect(k8sClient.Get(context.Background(), NamespacedName(deployment), deployment)).To(Succeed())
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		Expect(k8sClient.WaitUntil(ctx, testCondition{deployment})).ToNot(Succeed())
+		defer cancel()
+	})
 	It("waits until deployment ready", func() {
 		rls := mustInstallNginx()
 		defer helmClient.Uninstall(rls.Name) // nolint:errcheck
@@ -196,15 +229,6 @@ var _ = Describe("WaitUntil", func() {
 	})
 })
 
-var _ = Describe("GetEvents", func() {
-	It("can get events for existing pod", func() {
-		pod := mustGetReadyNginxPod(nginxRelease)
-		events, err := k8sClient.Events(context.Background(), pod)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(events)).To(BeNumerically(">", 0))
-	})
-})
-
 var _ = Describe("NamespacedName", func() {
 	It("can retrieve namespace and name", func() {
 		Expect(func() {
@@ -237,7 +261,8 @@ var _ = Describe("NamespacedName", func() {
 			defer func() {
 				_ = k8sClient.Delete(context.Background(), job)
 			}()
-			Expect(k8sClient.Get(context.Background(), NamespacedName(job), job)).To(Succeed())
+			tmp := JobWithNamespacedName(job.Namespace, job.Name)
+			Expect(k8sClient.Get(context.Background(), NamespacedName(tmp), tmp)).To(Succeed())
 		}).ShouldNot(Panic())
 	})
 	It("works for existing cronjob", func() {
@@ -246,7 +271,8 @@ var _ = Describe("NamespacedName", func() {
 			defer func() {
 				_ = k8sClient.Delete(context.Background(), cronJob)
 			}()
-			Expect(k8sClient.Get(context.Background(), NamespacedName(cronJob), cronJob)).To(Succeed())
+			tmp := CronJobWithNamespacedName(cronJob.Namespace, cronJob.Name)
+			Expect(k8sClient.Get(context.Background(), NamespacedName(tmp), tmp)).To(Succeed())
 		}).ShouldNot(Panic())
 	})
 })
