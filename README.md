@@ -10,7 +10,7 @@ This library is a collection of helpers to ease implementing integration tests
 utilizing [kind](https://github.com/kubernetes-sigs/kind), [helm](https://github.com/helm/helm) 
 and [kubernetes](https://github.com/kubernetes/kubernetes) without the need to install any CLI tools.
 
-If it improves the code readibility and ergonomics, the library will utilize
+If it improves the code readability and ergonomics, the library will utilize
 `panic` for rare errors, e.g. filesystem issues, and performance is not a
 primary requirement.
 Therefore it should not be used as part of a production service.
