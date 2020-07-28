@@ -22,6 +22,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -114,19 +115,19 @@ var _ = Describe("Events", func() {
 	})
 })
 
-var _ = Describe("GetPodsByOwner", func() {
+var _ = Describe("ListForOwner", func() {
 	// for successful usage, see `WaitUntilJobActive`-tests
 	It("fails for non-existing object", func() {
 		job := genPiJob()
 		job.Namespace = "doesnotexist"
-		_, err := k8sClient.GetPodsForOwner(context.Background(), job)
-		Expect(err).To(HaveOccurred())
+		podList := &corev1.PodList{}
+		Expect(k8sClient.ListForOwner(context.Background(), podList, job)).ToNot(Succeed())
 	})
 	It("fails for malformed object", func() {
 		job := genPiJob()
 		job.Namespace = "+"
-		_, err := k8sClient.GetPodsForOwner(context.Background(), job)
-		Expect(err).To(HaveOccurred())
+		podList := &corev1.PodList{}
+		Expect(k8sClient.ListForOwner(context.Background(), podList, job)).ToNot(Succeed())
 	})
 })
 
@@ -193,10 +194,10 @@ var _ = Describe("WaitUntil", func() {
 		defer cancel()
 		deployment := DeploymentWithNamespacedName(nginxRelease.Namespace, nginxRelease.Name+"-nginx")
 		Expect(k8sClient.Get(ctx, NamespacedName(deployment), deployment)).To(Succeed())
-		replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(replicaSets)).To(BeNumerically(">", 0))
-		rs := &replicaSets[0]
+		replicaSetList := &appsv1.ReplicaSetList{}
+		Expect(k8sClient.ListForOwner(context.Background(), replicaSetList, deployment)).To(Succeed())
+		Expect(len(replicaSetList.Items)).To(BeNumerically(">", 0))
+		rs := &replicaSetList.Items[0]
 		Expect(k8sClient.WaitUntil(ctx, ReplicaSetIsAvailable(rs), ReplicaSetIsReady(rs))).To(Succeed())
 		Expect(IsReplicaSetAvailable(rs)).To(Equal(true))
 		Expect(IsReplicaSetReady(rs)).To(Equal(true))
@@ -210,11 +211,11 @@ var _ = Describe("WaitUntil", func() {
 		defer cancel()
 		Expect(k8sClient.WaitUntil(ctx, JobIsActive(job))).To(Succeed())
 		Expect(IsJobActive(job)).To(Equal(true))
-		pods, err := k8sClient.GetPodsForJob(ctx, job)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(pods)).To(Equal(1))
+		podList := &corev1.PodList{}
+		Expect(k8sClient.ListForOwner(context.Background(), podList, job)).To(Succeed())
+		Expect(len(podList.Items)).To(Equal(1))
 	})
-	It("waits until job is active", func() {
+	It("waits until cronjob is active", func() {
 		cronJob := mustCreatePiCronJob()
 		defer func() {
 			_ = k8sClient.Delete(context.Background(), cronJob)
@@ -223,9 +224,9 @@ var _ = Describe("WaitUntil", func() {
 		defer cancel()
 		Expect(k8sClient.WaitUntil(ctx, CronJobIsActive(cronJob))).To(Succeed())
 		Expect(IsCronJobActive(cronJob)).To(Equal(true))
-		jobs, err := k8sClient.GetJobsForCronJob(ctx, cronJob)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(jobs)).To(Equal(1))
+		jobList := &batchv1.JobList{}
+		Expect(k8sClient.ListForOwner(ctx, jobList, cronJob)).To(Succeed())
+		Expect(len(jobList.Items)).To(Equal(1))
 	})
 })
 
@@ -247,10 +248,10 @@ var _ = Describe("NamespacedName", func() {
 		Expect(func() {
 			deployment := DeploymentWithNamespacedName(nginxRelease.Namespace, nginxRelease.Name+"-nginx")
 			Expect(k8sClient.Get(context.Background(), NamespacedName(deployment), deployment)).To(Succeed())
-			replicaSets, err := k8sClient.GetReplicaSetsForDeployment(context.Background(), deployment)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(len(replicaSets)).To(BeNumerically(">", 0))
-			rs := &replicaSets[0]
+			replicaSetList := &appsv1.ReplicaSetList{}
+			Expect(k8sClient.ListForOwner(context.Background(), replicaSetList, deployment)).To(Succeed())
+			Expect(len(replicaSetList.Items)).To(BeNumerically(">", 0))
+			rs := &replicaSetList.Items[0]
 			tmp := ReplicaSetWithNamespacedName(rs.Namespace, rs.Name)
 			Expect(k8sClient.Get(context.Background(), NamespacedName(tmp), tmp)).To(Succeed())
 		}).ShouldNot(Panic())

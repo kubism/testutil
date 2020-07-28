@@ -236,6 +236,35 @@ func (c *Client) Events(ctx context.Context, obj runtime.Object) ([]corev1.Event
 	return c.filterEvents(list.Items, obj)
 }
 
+func (c *Client) ListForOwner(ctx context.Context, list runtime.Object, owner runtime.Object) error {
+	accessor, err := meta.Accessor(owner)
+	if err != nil {
+		return err
+	}
+	if accessor.GetUID() == "" {
+		return fmt.Errorf("owner uid can not be empty")
+	}
+	err = c.List(ctx, list, client.InNamespace(accessor.GetNamespace()))
+	if err != nil {
+		return err
+	}
+	return reduceObjectsByOwner(list, accessor.GetUID())
+}
+
+func reduceObjectsByOwner(list runtime.Object, ownerUID types.UID) error {
+	switch l := list.(type) {
+	case *corev1.PodList:
+		l.Items = reducePodsByOwner(l.Items, ownerUID)
+	case *appsv1.ReplicaSetList:
+		l.Items = reduceReplicaSetsByOwner(l.Items, ownerUID)
+	case *batchv1.JobList:
+		l.Items = reduceJobsByOwner(l.Items, ownerUID)
+	default:
+		return fmt.Errorf("missing implementation for type of %T", list)
+	}
+	return nil
+}
+
 func (c *Client) WaitUntil(ctx context.Context, conditions ...Condition) error {
 	for _, condition := range conditions {
 		objectKey, err := client.ObjectKeyFromObject(condition.subject())
@@ -401,19 +430,6 @@ func reducePodsByOwner(pods []corev1.Pod, ownerUID types.UID) []corev1.Pod {
 	return matches
 }
 
-func (c *Client) GetPodsForOwner(ctx context.Context, owner runtime.Object) ([]corev1.Pod, error) {
-	pods := &corev1.PodList{}
-	ownerUID, err := c.getObjectsForOwner(ctx, pods, owner)
-	if err != nil {
-		return nil, err
-	}
-	return reducePodsByOwner(pods.Items, ownerUID), nil
-}
-
-func (c *Client) GetPodsForJob(ctx context.Context, job *batchv1.Job) ([]corev1.Pod, error) {
-	return c.GetPodsForOwner(ctx, job)
-}
-
 func reduceReplicaSetsByOwner(replicaSets []appsv1.ReplicaSet, ownerUID types.UID) []appsv1.ReplicaSet {
 	matches := []appsv1.ReplicaSet{}
 	for _, pod := range replicaSets {
@@ -426,19 +442,6 @@ func reduceReplicaSetsByOwner(replicaSets []appsv1.ReplicaSet, ownerUID types.UI
 	return matches
 }
 
-func (c *Client) GetReplicaSetsForOwner(ctx context.Context, owner runtime.Object) ([]appsv1.ReplicaSet, error) {
-	replicaSets := &appsv1.ReplicaSetList{}
-	ownerUID, err := c.getObjectsForOwner(ctx, replicaSets, owner)
-	if err != nil {
-		return nil, err
-	}
-	return reduceReplicaSetsByOwner(replicaSets.Items, ownerUID), nil
-}
-
-func (c *Client) GetReplicaSetsForDeployment(ctx context.Context, deployment *appsv1.Deployment) ([]appsv1.ReplicaSet, error) {
-	return c.GetReplicaSetsForOwner(ctx, deployment)
-}
-
 func reduceJobsByOwner(jobs []batchv1.Job, ownerUID types.UID) []batchv1.Job {
 	matches := []batchv1.Job{}
 	for _, pod := range jobs {
@@ -449,42 +452,6 @@ func reduceJobsByOwner(jobs []batchv1.Job, ownerUID types.UID) []batchv1.Job {
 		}
 	}
 	return matches
-}
-
-func (c *Client) GetJobsForOwner(ctx context.Context, owner runtime.Object) ([]batchv1.Job, error) {
-	jobs := &batchv1.JobList{}
-	ownerUID, err := c.getObjectsForOwner(ctx, jobs, owner)
-	if err != nil {
-		return nil, err
-	}
-	return reduceJobsByOwner(jobs.Items, ownerUID), nil
-}
-
-func (c *Client) GetJobsForCronJob(ctx context.Context, cronJob *batchv1beta1.CronJob) ([]batchv1.Job, error) {
-	return c.GetJobsForOwner(ctx, cronJob) // could also fetch using status
-}
-
-func (c *Client) getObjectsForOwner(ctx context.Context, list runtime.Object, owner runtime.Object) (types.UID, error) {
-	accessor, err := getValidAccessor(owner)
-	if err != nil {
-		return "", err
-	}
-	err = c.List(ctx, list, client.InNamespace(accessor.GetNamespace()))
-	if err != nil {
-		return "", err
-	}
-	return accessor.GetUID(), nil
-}
-
-func getValidAccessor(obj runtime.Object) (metav1.Object, error) {
-	accessor, err := meta.Accessor(obj)
-	if err != nil {
-		return nil, err
-	}
-	if accessor.GetUID() == "" {
-		return nil, fmt.Errorf("Owner UID can not be empty")
-	}
-	return accessor, nil
 }
 
 // NamespaceName conveniently creates a NamespacedName from any valid kubernetes
