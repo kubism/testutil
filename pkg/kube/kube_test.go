@@ -106,7 +106,7 @@ var _ = Describe("GetPodsByOwner", func() {
 var _ = Describe("GetPodLogs", func() {
 	It("can get logs of existing pod", func() {
 		pod := mustGetReadyNginxPod(nginxRelease)
-		logs, err := k8sClient.GetPodLogsString(context.Background(), pod)
+		logs, err := k8sClient.LogsString(context.Background(), pod)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(logs)).To(BeNumerically(">", 0))
 	})
@@ -114,7 +114,7 @@ var _ = Describe("GetPodLogs", func() {
 		var pod corev1.Pod
 		pod.Namespace = "default"
 		pod.Name = "doesnotexist"
-		_, err := k8sClient.GetPodLogsString(context.Background(), &pod)
+		_, err := k8sClient.LogsString(context.Background(), &pod)
 		Expect(err).To(HaveOccurred())
 	})
 })
@@ -199,7 +199,7 @@ var _ = Describe("WaitUntil", func() {
 var _ = Describe("GetEvents", func() {
 	It("can get events for existing pod", func() {
 		pod := mustGetReadyNginxPod(nginxRelease)
-		events, err := k8sClient.GetEvents(context.Background(), pod)
+		events, err := k8sClient.Events(context.Background(), pod)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(events)).To(BeNumerically(">", 0))
 	})

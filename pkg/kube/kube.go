@@ -95,7 +95,7 @@ func (c conditionAdapter) subject() runtime.Object {
 // port-forward and more.
 type Client struct {
 	client.Client
-	*kubernetes.Clientset
+	Clientset  *kubernetes.Clientset
 	restConfig *rest.Config
 	scheme     *runtime.Scheme
 }
@@ -181,6 +181,59 @@ func (c *Client) PortForward(pod *corev1.Pod, localPort, podPort int) (*PortForw
 func (pf *PortForward) Close() error {
 	close(pf.stopCh)
 	return nil
+}
+
+func (c *Client) Logs(ctx context.Context, pod *corev1.Pod) (io.ReadCloser, error) {
+	opts := corev1.PodLogOptions{}
+	req := c.Clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &opts)
+	return req.Stream(ctx)
+}
+
+func (c *Client) LogsString(ctx context.Context, pod *corev1.Pod) (string, error) {
+	readCloser, err := c.Logs(ctx, pod)
+	if err != nil {
+		return "", err
+	}
+	defer readCloser.Close()
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, readCloser)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func (c *Client) filterEvents(in []corev1.Event, obj runtime.Object) ([]corev1.Event, error) {
+	out := []corev1.Event{}
+	ref, err := reference.GetReference(c.scheme, obj)
+	if err != nil {
+		return nil, err
+	}
+	ogvk := ref.GroupVersionKind()
+	for _, e := range in {
+		egvk := e.InvolvedObject.GroupVersionKind()
+		if egvk.Kind != ogvk.Kind || egvk.Group != ogvk.Group || egvk.Version != ogvk.Version {
+			continue // well different object, so skip it
+		}
+		if e.InvolvedObject.Name != ref.Name {
+			continue // not the name we are looking for
+		}
+		out = append(out, e) // we found a related event
+	}
+	return out, nil
+}
+
+func (c *Client) Events(ctx context.Context, obj runtime.Object) ([]corev1.Event, error) {
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		return nil, err
+	}
+	listOptions := metav1.ListOptions{}
+	list, err := c.Clientset.CoreV1().Events(accessor.GetNamespace()).List(ctx, listOptions)
+	if err != nil {
+		return nil, err
+	}
+	return c.filterEvents(list.Items, obj)
 }
 
 func (c *Client) WaitUntil(ctx context.Context, conditions ...Condition) error {
@@ -361,26 +414,6 @@ func (c *Client) GetPodsForJob(ctx context.Context, job *batchv1.Job) ([]corev1.
 	return c.GetPodsForOwner(ctx, job)
 }
 
-func (c *Client) GetPodLogs(ctx context.Context, pod *corev1.Pod) (io.ReadCloser, error) {
-	opts := corev1.PodLogOptions{}
-	req := c.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &opts)
-	return req.Stream(ctx)
-}
-
-func (c *Client) GetPodLogsString(ctx context.Context, pod *corev1.Pod) (string, error) {
-	readCloser, err := c.GetPodLogs(ctx, pod)
-	if err != nil {
-		return "", err
-	}
-	defer readCloser.Close()
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, readCloser)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
 func reduceReplicaSetsByOwner(replicaSets []appsv1.ReplicaSet, ownerUID types.UID) []appsv1.ReplicaSet {
 	matches := []appsv1.ReplicaSet{}
 	for _, pod := range replicaSets {
@@ -429,39 +462,6 @@ func (c *Client) GetJobsForOwner(ctx context.Context, owner runtime.Object) ([]b
 
 func (c *Client) GetJobsForCronJob(ctx context.Context, cronJob *batchv1beta1.CronJob) ([]batchv1.Job, error) {
 	return c.GetJobsForOwner(ctx, cronJob) // could also fetch using status
-}
-
-func (c *Client) filterEvents(in []corev1.Event, obj runtime.Object) ([]corev1.Event, error) {
-	out := []corev1.Event{}
-	ref, err := reference.GetReference(c.scheme, obj)
-	if err != nil {
-		return nil, err
-	}
-	ogvk := ref.GroupVersionKind()
-	for _, e := range in {
-		egvk := e.InvolvedObject.GroupVersionKind()
-		if egvk.Kind != ogvk.Kind || egvk.Group != ogvk.Group || egvk.Version != ogvk.Version {
-			continue // well different object, so skip it
-		}
-		if e.InvolvedObject.Name != ref.Name {
-			continue // not the name we are looking for
-		}
-		out = append(out, e) // we found a related event
-	}
-	return out, nil
-}
-
-func (c *Client) GetEvents(ctx context.Context, obj runtime.Object) ([]corev1.Event, error) {
-	accessor, err := meta.Accessor(obj)
-	if err != nil {
-		return nil, err
-	}
-	listOptions := metav1.ListOptions{}
-	list, err := c.CoreV1().Events(accessor.GetNamespace()).List(ctx, listOptions)
-	if err != nil {
-		return nil, err
-	}
-	return c.filterEvents(list.Items, obj)
 }
 
 func (c *Client) getObjectsForOwner(ctx context.Context, list runtime.Object, owner runtime.Object) (types.UID, error) {
